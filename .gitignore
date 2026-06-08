@@ -14,3 +14,6 @@ keystore/
 keystore.properties
 *.jks
 *.keystore
+
+# Graphify analysis output (generated tooling artifacts)
+graphify-out/
