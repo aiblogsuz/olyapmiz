@@ -1,0 +1,49 @@
+/**
+ * Popup-only layout. Reuses newtab.css for all the control styles; this file
+ * just sizes the popup window and styles the header + preview. Loaded AFTER
+ * newtab.css so these rules win where they overlap.
+ */
+
+html, body {
+    width: 380px;
+    min-height: 0;
+    height: 580px;
+    overflow: hidden;
+}
+
+.popup-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--bg-dark);
+}
+
+.popup-head {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    flex: 0 0 auto;
+}
+
+.popup-head h1 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.popup-head p {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.preview-canvas {
+    flex: 0 0 auto;
+    width: 100%;
+    height: 150px;
+    display: block;
+    background: #000;
+    border-bottom: 1px solid var(--border);
+}
+
+/* .tab-bar, .settings-content, .settings-footer, and all control styles come
+   from newtab.css. settings-content already scrolls (flex:1; overflow-y:auto). */

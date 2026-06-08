@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>O'lyapmiz</title>
+    <link rel="stylesheet" href="newtab.css">
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="popup-shell">
+        <div class="popup-head">
+            <h1>O'lyapmiz</h1>
+            <p>Your life, one dot at a time</p>
+        </div>
+
+        <canvas id="previewCanvas" class="preview-canvas"></canvas>
+
+        <!-- Tabs -->
+        <div class="tab-bar">
+            <button class="tab-btn" data-tab="YIL">Yil</button>
+            <button class="tab-btn" data-tab="UMR">Umr</button>
+        </div>
+
+        <div class="settings-content">
+            <!-- Theme (both) -->
+            <section class="settings-section" data-scope="both">
+                <h3>Theme</h3>
+                <div class="theme-grid">
+                    <button class="theme-btn" data-theme="LIGHT"><div class="theme-preview light"></div><span>Light</span></button>
+                    <button class="theme-btn" data-theme="DARK"><div class="theme-preview dark"></div><span>Dark</span></button>
+                    <button class="theme-btn active" data-theme="AMOLED"><div class="theme-preview amoled"></div><span>AMOLED</span></button>
+                    <button class="theme-btn" data-theme="CUSTOM"><div class="theme-preview custom"></div><span>Custom</span></button>
+                </div>
+            </section>
+
+            <!-- Custom Colors (both) -->
+            <section id="customColorsSection" class="settings-section hidden" data-scope="both">
+                <h3>Custom Colors</h3>
+                <div class="color-grid">
+                    <div class="color-input"><label>Background</label><input type="color" id="customBg" value="#1A1A1A"></div>
+                    <div class="color-input"><label>Filled Dots</label><input type="color" id="customFilled" value="#E0E0E0"></div>
+                    <div class="color-input"><label>Empty Dots</label><input type="color" id="customEmpty" value="#3A3A3A"></div>
+                    <div class="color-input"><label>Today</label><input type="color" id="customToday" value="#5BA0E9"></div>
+                </div>
+            </section>
+
+            <!-- Dots (Yil) -->
+            <section class="settings-section" data-scope="yil">
+                <h3>Dots</h3>
+                <p class="section-hint">Shape</p>
+                <div class="chip-group" id="shapeGroup">
+                    <button class="chip" data-shape="CIRCLE">Circle</button>
+                    <button class="chip" data-shape="SQUARE">Square</button>
+                    <button class="chip" data-shape="ROUNDED_SQUARE">Rounded</button>
+                    <button class="chip" data-shape="DIAMOND">Diamond</button>
+                </div>
+                <p class="section-hint" style="margin-top:10px;">Style</p>
+                <div class="chip-group" id="styleGroup">
+                    <button class="chip" data-dotstyle="FLAT">Flat</button>
+                    <button class="chip" data-dotstyle="GRADIENT">Gradient</button>
+                    <button class="chip" data-dotstyle="OUTLINED">Outlined</button>
+                    <button class="chip" data-dotstyle="SOFT_GLOW">Glow</button>
+                    <button class="chip" data-dotstyle="NEON">Neon</button>
+                    <button class="chip" data-dotstyle="EMBOSSED">Embossed</button>
+                </div>
+            </section>
+
+            <!-- Marks (Umr) -->
+            <section class="settings-section" data-scope="umr">
+                <h3>Marks</h3>
+                <div class="style-toggle">
+                    <button class="style-btn active" data-style="DOTS">Dots</button>
+                    <button class="style-btn" data-style="X_MARKS">X marks</button>
+                </div>
+            </section>
+
+            <!-- Calendar (Yil) -->
+            <section class="settings-section" data-scope="yil">
+                <h3>Calendar</h3>
+                <p class="section-hint">Months per row</p>
+                <div class="style-toggle">
+                    <button class="col-btn" data-cols="3">3 × 4</button>
+                    <button class="col-btn" data-cols="2">2 × 6</button>
+                </div>
+                <label class="toggle-row" style="margin-top:12px;"><input type="checkbox" id="highlightToday"><span>Highlight today</span></label>
+                <label class="toggle-row" style="margin-top:10px;"><input type="checkbox" id="showStats"><span>Show year stats line</span></label>
+                <label class="toggle-row" style="margin-top:10px;"><input type="checkbox" id="showMonthLabels"><span>Show month labels</span></label>
+            </section>
+
+            <!-- Life Data (Umr) -->
+            <section class="settings-section" data-scope="umr">
+                <h3>Life Data</h3>
+                <div class="birthday-grid">
+                    <div class="input-group"><label for="meBirthday">You</label><input type="text" id="meBirthday" class="date-input" placeholder="dd/mm/yyyy" inputmode="numeric" maxlength="10"></div>
+                    <div class="input-group"><label for="momBirthday">Mom</label><input type="text" id="momBirthday" class="date-input" placeholder="dd/mm/yyyy" inputmode="numeric" maxlength="10"></div>
+                    <div class="input-group"><label for="dadBirthday">Dad</label><input type="text" id="dadBirthday" class="date-input" placeholder="dd/mm/yyyy" inputmode="numeric" maxlength="10"></div>
+                </div>
+            </section>
+
+            <!-- Transparency (both) -->
+            <section class="settings-section" data-scope="both">
+                <h3>Transparency <span class="mode-tag" id="alphaModeTag"></span></h3>
+                <div class="slider-row"><label>Filled</label><input type="range" id="filledAlpha" min="10" max="100" value="100"><span id="filledAlphaVal">100%</span></div>
+                <div class="slider-row"><label>Empty</label><input type="range" id="emptyAlpha" min="10" max="100" value="60"><span id="emptyAlphaVal">60%</span></div>
+            </section>
+
+            <!-- Position (both) -->
+            <section class="settings-section" data-scope="both">
+                <h3>Position <span class="mode-tag" id="posModeTag"></span></h3>
+                <div class="slider-row"><label>Horizontal</label><input type="range" id="hOffset" min="-50" max="50" value="0"><span id="hOffsetVal">0%</span></div>
+                <div class="slider-row"><label>Vertical</label><input type="range" id="vOffset" min="-50" max="50" value="0"><span id="vOffsetVal">0%</span></div>
+                <div class="slider-row"><label>Scale</label><input type="range" id="scale" min="50" max="150" value="100"><span id="scaleVal">100%</span></div>
+                <div class="slider-row"><label>Stats Y</label><input type="range" id="statsOffset" min="-30" max="30" value="0"><span id="statsOffsetVal">0%</span></div>
+            </section>
+
+            <!-- Goals (Yil) -->
+            <section class="settings-section" data-scope="yil">
+                <div class="subhead">
+                    <h3 style="margin:0;">Goals</h3>
+                    <label class="toggle-row"><input type="checkbox" id="goalsEnabled"><span></span></label>
+                </div>
+                <div class="list" id="goalsList"></div>
+                <button class="add-btn" id="addGoalBtn">+ Add goal</button>
+            </section>
+
+            <!-- Events (Umr) -->
+            <section class="settings-section" data-scope="umr">
+                <div class="subhead">
+                    <h3 style="margin:0;">Events</h3>
+                    <label class="toggle-row"><input type="checkbox" id="eventsEnabled"><span></span></label>
+                </div>
+                <div class="list" id="eventsList"></div>
+                <button class="add-btn" id="addEventBtn">+ Add event</button>
+            </section>
+
+            <!-- Life Expectancy (Umr) -->
+            <section class="settings-section" data-scope="umr">
+                <h3>Life Expectancy</h3>
+                <div class="weeks-input">
+                    <label>Total Weeks</label>
+                    <input type="number" id="totalWeeks" min="1000" max="6000" value="4000">
+                    <span class="weeks-label">(~<span id="yearsLabel">76</span> years)</span>
+                </div>
+            </section>
+
+            <!-- Auto-switch (both) -->
+            <section class="settings-section" data-scope="both">
+                <h3>Auto-switch</h3>
+                <label class="toggle-row"><input type="checkbox" id="autoSwitchToggle"><span>Rotate between Yil and Umr</span></label>
+                <div id="autoSwitchRow" class="slider-row hidden" style="margin-top:10px;">
+                    <label>Every</label>
+                    <select id="autoSwitchInterval" class="select">
+                        <option value="1000">1 second</option>
+                        <option value="2000">2 seconds</option>
+                        <option value="5000">5 seconds</option>
+                        <option value="10000">10 seconds</option>
+                        <option value="30000">30 seconds</option>
+                        <option value="60000">1 minute</option>
+                        <option value="300000">5 minutes</option>
+                        <option value="600000">10 minutes</option>
+                        <option value="1800000">30 minutes</option>
+                        <option value="3600000">1 hour</option>
+                    </select>
+                </div>
+            </section>
+
+            <!-- Data (both) -->
+            <section class="settings-section" data-scope="both">
+                <h3>Data</h3>
+                <div class="data-buttons">
+                    <button id="exportBtn" class="data-btn">Export</button>
+                    <button id="importBtn" class="data-btn">Import</button>
+                </div>
+                <div id="dataStatus" class="data-status"></div>
+            </section>
+        </div>
+
+        <div class="settings-footer">
+            <button id="saveViewBtn" class="save-btn">Save &amp; show Yil</button>
+        </div>
+    </div>
+
+    <script src="settings.js"></script>
+    <script src="umr-math.js"></script>
+    <script src="dots.js"></script>
+    <script src="themes.js"></script>
+    <script src="yil-renderer.js"></script>
+    <script src="umr-renderer.js"></script>
+    <script src="settings-ui.js"></script>
+    <script src="popup.js"></script>
+</body>
+</html>
