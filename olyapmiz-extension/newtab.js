@@ -16,8 +16,11 @@ let midnightTimer = null;
 function renderView(s) {
     const canvas = byId('mainCanvas');
     if (!canvas) return;
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    // Render at device-pixel resolution for crisp dots/text on HiDPI screens.
+    // CSS pins display to 100vw/100vh, so the backing store can be larger.
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width = Math.round(window.innerWidth * dpr);
+    canvas.height = Math.round(window.innerHeight * dpr);
 
     const view = S.currentEffectiveMode(Date.now(), s);
     lastView = view;

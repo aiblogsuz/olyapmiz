@@ -22,22 +22,35 @@
         return Math.floor((d - start) / 86400000); // 1-based (Jan 1 => 1)
     }
 
-    /** Port of CalendarLayout.compute (device-class buckets keyed on aspect/width). */
+    /** Port of CalendarLayout.compute (device-class buckets keyed on aspect/width).
+     *  Adds a landscape branch so wide laptop/desktop screens (aspect < 1) spread
+     *  the grid across the available width instead of inheriting phone-portrait
+     *  margins. Note: width/height are backing-store pixels (canvas is rendered
+     *  at devicePixelRatio), so the cap scales with resolution for crisp dots. */
     function computeLayout(widthPx, heightPx) {
         const width = widthPx, height = heightPx;
         const aspect = height / width;
 
-        const paddingXRatio = aspect > 2.1 ? 0.12 : aspect > 2.0 ? 0.15 : 0.18;
+        let paddingXRatio, safeTopRatio, statsInsetRatio;
+        if (aspect < 1.0) {
+            // Landscape: tighten horizontal padding and top inset to use the width.
+            paddingXRatio = aspect < 0.6 ? 0.06 : 0.09;
+            safeTopRatio = 0.12;
+            statsInsetRatio = 0.06;
+        } else {
+            paddingXRatio = aspect > 2.1 ? 0.12 : aspect > 2.0 ? 0.15 : 0.18;
+            safeTopRatio = aspect > 2.1 ? 0.28 : aspect > 2.0 ? 0.25 : 0.22;
+            statsInsetRatio = aspect > 2.1 ? 0.045 : aspect > 2.0 ? 0.048 : 0.055;
+        }
+
         const paddingXPx = width * paddingXRatio;
-
-        const safeTopRatio = aspect > 2.1 ? 0.28 : aspect > 2.0 ? 0.25 : 0.22;
         const safeTopPx = height * safeTopRatio;
-
-        const statsBottomInsetPx = height * (aspect > 2.1 ? 0.045 : aspect > 2.0 ? 0.048 : 0.055);
-        const statsBottomBaselinePx = height - statsBottomInsetPx;
+        const statsBottomBaselinePx = height - height * statsInsetRatio;
 
         const dotGapRatio = width <= 720 ? 0.55 : width <= 900 ? 0.62 : 0.70;
-        const dotSizeCapPx = 20;
+        // Scale the cap with the smaller backing dimension so high-DPI / large
+        // screens can grow dots (floor of 20 keeps small windows unchanged).
+        const dotSizeCapPx = Math.max(20, Math.round(Math.min(width, height) * 0.025));
         const monthMarginRatio = Math.max(1.0, Math.min(2.0, widthPx / 600));
 
         return { paddingXPx, safeTopPx, statsBottomBaselinePx, dotGapRatio, monthMarginRatio, dotSizeCapPx };
@@ -71,7 +84,7 @@
         }
         const upcomingGoalCount = Object.keys(goalByDoy).filter((d) => Number(d) > doy).length;
 
-        const columns = Math.max(2, Math.min(3, settings.calendarViewSettings.columnsPerRow));
+        const columns = Math.max(2, Math.min(6, settings.calendarViewSettings.columnsPerRow));
         const rows = Math.ceil(12 / columns);
 
         const layout = computeLayout(width, height);
@@ -123,7 +136,10 @@
         const gridLeftStart = paddingX + (availableWidth - gridBlockWidth) / 2;
 
         const mondayFirst = settings.calendarViewSettings.mondayFirst;
-        const monthLabelColor = settings.viewModeSettings.monthLabelColor;
+        // Month-label / stats text follows the theme so it stays legible on light
+        // backgrounds. (viewModeSettings.monthLabelColor defaults to white, which
+        // is invisible on the LIGHT theme and isn't exposed in the UI.)
+        const monthLabelColor = colors.text;
         const showMonthLabels = settings.viewModeSettings.showMonthLabels;
         const currentWeekColor = settings.calendarViewSettings.currentWeekColor;
 
