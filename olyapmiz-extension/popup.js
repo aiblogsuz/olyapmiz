@@ -12,8 +12,10 @@ let committed = S.getDefaults();
 function renderPreview(s) {
     const canvas = byId('previewCanvas');
     if (!canvas) return;
-    canvas.width = canvas.clientWidth || 380;
-    canvas.height = canvas.clientHeight || 150;
+    // Render at device-pixel resolution; CSS pins the display size.
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width = Math.round((canvas.clientWidth || 380) * dpr);
+    canvas.height = Math.round((canvas.clientHeight || 150) * dpr);
     const view = S.currentEffectiveMode(Date.now(), s);
     if (view === 'UMR') OlyapmizUmr.render(canvas, s);
     else OlyapmizYil.render(canvas, s);

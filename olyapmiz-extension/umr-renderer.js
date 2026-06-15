@@ -73,7 +73,9 @@
         const isX = u.visualMode === 'X_MARKS';
         const livedAlpha = u.livedAlpha;
         const emptyAlpha = u.emptyAlpha;
-        const emptyColor = isX ? 0xFFFFFFFF : colors.emptyDot;
+        // X marks use the theme text color (white on dark, near-black on light)
+        // so unlived weeks stay visible on every theme.
+        const emptyColor = isX ? colors.text : colors.emptyDot;
 
         // Background
         ctx.fillStyle = css(colors.background);
@@ -215,7 +217,7 @@
                     if (y > height - 32) return;
                     const weeksLeft = Math.max(0, Math.floor((event.targetDate - now) / L.WEEK_MS));
                     circle(ctx, leftPad, y - textSize * 0.32, swatchRadius, css(event.color), 1);
-                    ctx.fillStyle = css(0xFFEDE8DE, 230 / 255);
+                    ctx.fillStyle = css(colors.text, 230 / 255);
                     ctx.fillText(`${event.title} — ${weeksLeft} weeks`, leftPad + swatchToText, y);
                 });
             }

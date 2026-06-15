@@ -51,7 +51,7 @@
             },
 
             calendarViewSettings: {
-                columnsPerRow: 3,                    // 2 (2x6) or 3 (3x4)
+                columnsPerRow: 3,                    // 3 (3x4) or 6 (6x2)
                 showYearStats: true,
                 mondayFirst: true,
                 highlightCurrentWeek: true,
