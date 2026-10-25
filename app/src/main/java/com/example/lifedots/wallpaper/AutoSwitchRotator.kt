@@ -30,7 +30,7 @@ class AutoSwitchRotator(
     }
 
     /** Call after settings change. */
-    fun refresh(settings: WallpaperSettings) {
+    fun refresh(settings: WallpaperSettings?) {
         lastSettings = settings
         reschedule()
     }

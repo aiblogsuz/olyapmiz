@@ -324,7 +324,13 @@ fun selectCalendar(settings: WallpaperSettings, mode: TopViewMode, now: Long): W
 
 class LifeDotsPreferences(context: Context) {
 
-    private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+    init { check(isUserUnlocked(appContext)) { "Calendar preferences are unavailable before user unlock." } }
+    // The application uses normal credential-protected storage (no defaultToDeviceProtectedStorage).
+    // A caller's device-protected wrapper must never become the authoritative settings store.
+    private val prefs: SharedPreferences = appContext.also {
+        check(!it.isDeviceProtectedStorage) { "Normal calendar preferences require credential-protected storage." }
+    }.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val gson = Gson()
 
     init {
@@ -333,6 +339,8 @@ class LifeDotsPreferences(context: Context) {
 
     private val _settingsFlow = MutableStateFlow(loadSettings())
     val settingsFlow: StateFlow<WallpaperSettings> = _settingsFlow.asStateFlow()
+
+    init { BootCalendarStore.publish(appContext, _settingsFlow.value) }
 
     val settings: WallpaperSettings
         get() = _settingsFlow.value
@@ -1186,21 +1194,25 @@ class LifeDotsPreferences(context: Context) {
         prefs.edit().putBoolean(KEY_SOUNDS_ENABLED, enabled).apply()
         val current = _settingsFlow.value
         _settingsFlow.value = current.copy(soundsEnabled = enabled)
+        notifyWallpaperChanged()
     }
 
     fun setVibrationsEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_VIBRATIONS_ENABLED, enabled).apply()
         val current = _settingsFlow.value
         _settingsFlow.value = current.copy(vibrationsEnabled = enabled)
+        notifyWallpaperChanged()
     }
 
     fun setApplyMode(mode: WallpaperApplyMode) {
         prefs.edit().putString(KEY_APPLY_MODE, mode.name).apply()
         _settingsFlow.value = _settingsFlow.value.copy(applyMode = mode)
+        notifyWallpaperChanged()
     }
 
     fun notifyWallpaperChanged() {
-        wallpaperChangeListeners.forEach { it.invoke() }
+        BootCalendarStore.publish(appContext, settings)
+        wallpaperChangeListeners.toList().forEach { it.invoke() }
     }
 
     companion object {
@@ -1340,6 +1352,7 @@ class LifeDotsPreferences(context: Context) {
         private var instance: LifeDotsPreferences? = null
 
         fun getInstance(context: Context): LifeDotsPreferences {
+            check(isUserUnlocked(context)) { "Calendar preferences are unavailable before user unlock." }
             return instance ?: synchronized(this) {
                 instance ?: LifeDotsPreferences(context.applicationContext).also { instance = it }
             }

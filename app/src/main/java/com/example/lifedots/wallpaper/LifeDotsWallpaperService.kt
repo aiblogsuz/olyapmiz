@@ -1,5 +1,11 @@
 package com.example.lifedots.wallpaper
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import com.example.lifedots.preferences.isUserUnlocked
+import com.example.lifedots.preferences.settingsForRendering
 import android.graphics.Bitmap
 import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
@@ -66,10 +72,22 @@ class LifeDotsWallpaperService : WallpaperService() {
 
     inner class LifeDotsEngine : Engine() {
 
-        private val preferences by lazy { LifeDotsPreferences.getInstance(applicationContext) }
         private val handler = Handler(Looper.getMainLooper())
         private var visible = false
         private var lastDrawnDay = -1
+        private var keepAliveStarted = false
+        private var unlockReceiverRegistered = false
+        private val unlockReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action != Intent.ACTION_USER_UNLOCKED) return
+                handler.post {
+                    if (isUserUnlocked(applicationContext)) {
+                        startKeepAliveIfUnlocked()
+                        onVisibilityChanged(visible)
+                    }
+                }
+            }
+        }
 
         private val autoSwitchRotator = AutoSwitchRotator(applicationContext) {
             // onTick — just request a redraw; the formula will pick up the new mode.
@@ -87,7 +105,7 @@ class LifeDotsWallpaperService : WallpaperService() {
         // Animation loop
         private val animationRunner = object : Runnable {
             override fun run() {
-                if (visible && preferences.settings.animationSettings.enabled) {
+                if (visible && settingsForRendering(applicationContext)?.animationSettings?.enabled == true) {
                     animationTime = System.currentTimeMillis()
                     draw()
                     handler.postDelayed(this, animationFrameDelay)
@@ -99,8 +117,9 @@ class LifeDotsWallpaperService : WallpaperService() {
         private var fluidPhase = 0f
         private val fluidRunner = object : Runnable {
             override fun run() {
-                if (visible && preferences.settings.fluidEffectSettings.enabled) {
-                    fluidPhase += 0.02f * preferences.settings.fluidEffectSettings.flowSpeed
+                val fluid = settingsForRendering(applicationContext)?.fluidEffectSettings
+                if (visible && fluid?.enabled == true) {
+                    fluidPhase += 0.02f * fluid.flowSpeed
                     if (fluidPhase > 2 * Math.PI) fluidPhase = 0f
                     draw()
                     handler.postDelayed(this, 50)
@@ -114,8 +133,8 @@ class LifeDotsWallpaperService : WallpaperService() {
         private var systemSafeInsetRight = 0
 
         private val settingsChangeListener: () -> Unit = {
-            autoSwitchRotator.refresh(preferences.settings)
             handler.post {
+                autoSwitchRotator.refresh(settingsForRendering(applicationContext))
                 if (visible) onVisibilityChanged(true)
             }
         }
@@ -133,13 +152,26 @@ class LifeDotsWallpaperService : WallpaperService() {
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
             LifeDotsPreferences.addWallpaperChangeListener(settingsChangeListener)
-            autoSwitchRotator.refresh(preferences.settings)
+            val filter = IntentFilter(Intent.ACTION_USER_UNLOCKED)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                applicationContext.registerReceiver(unlockReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("DEPRECATION")
+                applicationContext.registerReceiver(unlockReceiver, filter)
+            }
+            unlockReceiverRegistered = true
+            autoSwitchRotator.refresh(settingsForRendering(applicationContext))
             // Schedule the daily refresh alarm the first time the wallpaper runs, so
             // users don't have to wait for a reboot for the safety net to arm.
             DateChangeReceiver.scheduleDailyAlarm(applicationContext)
             // Anchor our process in the foreground so Samsung Freecess can't freeze
             // it while the wallpaper is hidden behind the lock screen.
-            if (!isPreview) {
+            startKeepAliveIfUnlocked()
+        }
+
+        private fun startKeepAliveIfUnlocked() {
+            if (!isPreview && !keepAliveStarted && isUserUnlocked(applicationContext)) {
+                keepAliveStarted = true
                 activeEngineCount++
                 KeepAliveService.start(applicationContext)
             }
@@ -149,7 +181,11 @@ class LifeDotsWallpaperService : WallpaperService() {
             super.onDestroy()
             LifeDotsPreferences.removeWallpaperChangeListener(settingsChangeListener)
             autoSwitchRotator.cancel()
-            if (!isPreview) {
+            if (unlockReceiverRegistered) {
+                applicationContext.unregisterReceiver(unlockReceiver)
+                unlockReceiverRegistered = false
+            }
+            if (keepAliveStarted) {
                 activeEngineCount = (activeEngineCount - 1).coerceAtLeast(0)
                 if (activeEngineCount == 0) KeepAliveService.stop(applicationContext)
             }
@@ -162,17 +198,20 @@ class LifeDotsWallpaperService : WallpaperService() {
             this.visible = visible
             handler.removeCallbacks(animationRunner)
             handler.removeCallbacks(fluidRunner)
+            val settings = settingsForRendering(applicationContext)
+            autoSwitchRotator.refresh(settings)
             autoSwitchRotator.setVisible(visible)
             if (visible) {
+                startKeepAliveIfUnlocked()
                 draw()
                 scheduleNextMidnightCheck()
                 // Start animation loop if animations are enabled
-                if (preferences.settings.animationSettings.enabled) {
+                if (settings?.animationSettings?.enabled == true) {
                     animationTime = System.currentTimeMillis()
                     handler.post(animationRunner)
                 }
                 // Start fluid loop if fluid effects are enabled
-                if (preferences.settings.fluidEffectSettings.enabled) {
+                if (settings?.fluidEffectSettings?.enabled == true) {
                     handler.post(fluidRunner)
                 }
             } else {
@@ -251,9 +290,15 @@ class LifeDotsWallpaperService : WallpaperService() {
                     if (currentDay != lastDrawnDay && lastDrawnDay != -1) {
                         android.util.Log.i("LifeDots", "Day rolled over: $lastDrawnDay → $currentDay")
                     }
-                    renderer.render(canvas, preferences.settings, System.currentTimeMillis(),
-                        animationTime, fluidPhase, systemSafeInsetTop, systemSafeInsetBottom,
-                        systemSafeInsetLeft, systemSafeInsetRight)
+                    val settings = settingsForRendering(applicationContext)
+                    if (settings == null) {
+                        // No valid pre-unlock snapshot: never invent a different calendar.
+                        canvas.drawColor(Color.BLACK)
+                    } else {
+                        renderer.render(canvas, settings, System.currentTimeMillis(),
+                            animationTime, fluidPhase, systemSafeInsetTop, systemSafeInsetBottom,
+                            systemSafeInsetLeft, systemSafeInsetRight)
+                    }
                     lastDrawnDay = currentDay
                 }
             } finally {

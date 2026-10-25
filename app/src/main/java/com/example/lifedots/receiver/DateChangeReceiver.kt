@@ -11,6 +11,7 @@ import android.os.PowerManager
 import android.util.Log
 import android.graphics.Bitmap
 import android.graphics.Color
+import com.example.lifedots.preferences.isUserUnlocked
 import com.example.lifedots.preferences.LifeDotsPreferences
 import com.example.lifedots.preferences.WallpaperApplyMode
 import com.example.lifedots.service.KeepAliveService
@@ -32,12 +33,24 @@ import java.util.Calendar
 class DateChangeReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        if (!isUserUnlocked(context)) {
+            // Direct Boot may access only device-protected storage and safe system services.
+            // The OS restores the selected live wallpaper; no CE settings or foreground service here.
+            if (intent.action in setOf(Intent.ACTION_LOCKED_BOOT_COMPLETED, Intent.ACTION_BOOT_COMPLETED,
+                Intent.ACTION_MY_PACKAGE_REPLACED, "android.intent.action.QUICKBOOT_POWERON", ACTION_DAILY_TICK,
+                Intent.ACTION_DATE_CHANGED, Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_TIME_CHANGED)) {
+                scheduleDailyAlarm(context.createDeviceProtectedStorageContext())
+            }
+            return
+        }
         when (intent.action) {
+            Intent.ACTION_LOCKED_BOOT_COMPLETED,
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED,
             "android.intent.action.QUICKBOOT_POWERON" -> {
                 Log.i("LifeDots", "${intent.action} — scheduling daily refresh alarm")
                 scheduleDailyAlarm(context)
+                pokeAutoSwitchRedraw(context)
                 maybeStartKeepAlive(context)
                 refreshLockSnapshotIfNeeded(context)
                 // Note: auto-switch alarm is intentionally NOT re-armed here. The engine's

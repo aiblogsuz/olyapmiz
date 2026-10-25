@@ -4,6 +4,7 @@ import android.app.WallpaperManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import com.example.lifedots.preferences.isUserUnlocked
 import com.example.lifedots.preferences.LifeDotsPreferences
 import com.example.lifedots.preferences.WallpaperApplyMode
 import com.example.lifedots.receiver.DateChangeReceiver
@@ -19,6 +20,7 @@ object LockWallpaperController {
 
     @Synchronized
     fun apply(context: Context) {
+        check(isUserUnlocked(context)) { "Unlock your phone before applying a wallpaper." }
         val app = context.applicationContext
         val wm = WallpaperManager.getInstance(app)
         check(wm.isWallpaperSupported && wm.isSetWallpaperAllowed) {
@@ -53,6 +55,7 @@ object LockWallpaperController {
 
     @Synchronized
     fun refreshIfOwned(context: Context): Boolean {
+        if (!isUserUnlocked(context)) return false
         val app = context.applicationContext
         val preferences = LifeDotsPreferences.getInstance(app)
         if (preferences.settings.applyMode != WallpaperApplyMode.CALENDAR_LOCK_BLACK_HOME) return false

@@ -53,7 +53,7 @@ jobs:
           Path('keystore.properties').write_text('\n'.join(key + '=' + escape(value) for key, value in values.items()) + '\n')
           PY
       - name: Build compatible review update
-        run: ./gradlew assembleRelease -PappVersionCode=10400 -PappVersionName=1.4.0-review --console=plain
+        run: ./gradlew assembleRelease -PappVersionCode=10401 -PappVersionName=1.4.1-review --console=plain
       - name: Save signed APK without publishing a release
         uses: actions/upload-artifact@v4
         with:
