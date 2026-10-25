@@ -19,7 +19,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -48,7 +55,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.lifedots.preferences.Event
 import com.example.lifedots.preferences.Goal
 import java.text.SimpleDateFormat
 import java.time.Instant
@@ -68,40 +74,6 @@ private val PaperBase = Color(0xFFC7B083)
 private val PaperLight = Color(0xFFE1CFA2)
 private val PaperInk = Color(0xFF1E160B)
 
-/**
- * Event editor — a thin re-brand of [GoalEditorDialog] for Umr events.
- * Events and goals share the same data shape (title / target date / colour),
- * so the editor reuses the goal dialog and converts at the boundary. This
- * keeps the two types distinct in preferences (they never bleed into each
- * other) while presenting the right copy ("Add Event", "Event Title").
- */
-@Composable
-fun EventEditorDialog(
-    event: Event? = null,
-    onSave: (Event) -> Unit,
-    onDelete: (() -> Unit)? = null,
-    onDismiss: () -> Unit,
-) {
-    GoalEditorDialog(
-        goal = event?.let {
-            Goal(id = it.id, title = it.title, targetDate = it.targetDate, color = it.color)
-        },
-        onSave = { saved ->
-            onSave(
-                Event(
-                    id = saved.id,
-                    title = saved.title,
-                    targetDate = saved.targetDate,
-                    color = saved.color,
-                )
-            )
-        },
-        onDelete = onDelete,
-        onDismiss = onDismiss,
-        isEvent = true,
-    )
-}
-
 @Composable
 fun GoalEditorDialog(
     goal: Goal? = null,
@@ -111,15 +83,16 @@ fun GoalEditorDialog(
     isEvent: Boolean = false,
 ) {
     val itemLabel = if (isEvent) "Event" else "Goal"
-    var title by remember { mutableStateOf(goal?.title ?: "") }
+    var title by rememberSaveable(goal?.id) { mutableStateOf(goal?.title ?: "") }
     val initialDate: LocalDate? = remember(goal) {
         goal?.targetDate?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }
     }
-    var dayText by remember { mutableStateOf(initialDate?.dayOfMonth?.toString()?.padStart(2, '0') ?: "") }
-    var monthText by remember { mutableStateOf(initialDate?.monthValue?.toString()?.padStart(2, '0') ?: "") }
-    var yearText by remember { mutableStateOf(initialDate?.year?.toString() ?: "") }
-    var selectedColor by remember { mutableIntStateOf(goal?.color ?: 0xFF2D75A8.toInt()) }
+    var dayText by rememberSaveable(goal?.id) { mutableStateOf(initialDate?.dayOfMonth?.toString()?.padStart(2, '0') ?: "") }
+    var monthText by rememberSaveable(goal?.id) { mutableStateOf(initialDate?.monthValue?.toString()?.padStart(2, '0') ?: "") }
+    var yearText by rememberSaveable(goal?.id) { mutableStateOf(initialDate?.year?.toString() ?: "") }
+    var selectedColor by rememberSaveable(goal?.id) { mutableIntStateOf(goal?.color ?: 0xFF2D75A8.toInt()) }
 
+    var confirmDelete by rememberSaveable { mutableStateOf(false) }
     val resolvedDate: LocalDate? = remember(dayText, monthText, yearText) {
         val d = dayText.toIntOrNull()
         val m = monthText.toIntOrNull()
@@ -253,10 +226,8 @@ fun GoalEditorDialog(
                     DialogTextButton(
                         text = if (goal != null && onDelete != null) "Delete" else "Cancel",
                         onClick = {
-                            if (goal != null && onDelete != null) {
-                                onDelete()
-                            }
-                            onDismiss()
+                            if (goal != null && onDelete != null) confirmDelete = true
+                            else onDismiss()
                         },
                         modifier = Modifier.weight(1f),
                     )
@@ -285,14 +256,22 @@ fun GoalEditorDialog(
             }
         }
     }
-
+    if (confirmDelete) {
+        AlertDialog(onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete ${itemLabel.lowercase()}?") },
+            text = { Text("“${goal?.title.orEmpty()}” will be removed from your calendar.") },
+            confirmButton = { TextButton(onClick = {
+                onDelete?.invoke(); confirmDelete = false; onDismiss()
+            }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } })
+    }
 }
 
 @Composable
 private fun DialogCloseButton(onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(46.dp)
+            .size(48.dp)
             .clip(CircleShape)
             .background(
                 Brush.radialGradient(
@@ -300,7 +279,8 @@ private fun DialogCloseButton(onClick: () -> Unit) {
                 )
             )
             .border(1.dp, DialogGoldDark, CircleShape)
-            .clickable(onClick = onClick),
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = "Close editor" },
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -323,7 +303,7 @@ private fun GoalParchmentInput(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(112.dp)
+            .heightIn(min = 112.dp)
             .clip(RoundedCornerShape(15.dp))
             .background(
                 Brush.linearGradient(
@@ -377,7 +357,7 @@ private fun GoalParchmentInput(
                         fontSize = 19.sp,
                         fontStyle = FontStyle.Italic,
                     ),
-                    modifier = Modifier.fillMaxWidth(0.68f),
+                    modifier = Modifier.fillMaxWidth(0.68f).semantics { contentDescription = labelText },
                 )
             }
             Spacer(modifier = Modifier.height(9.dp))
@@ -437,7 +417,7 @@ private fun GoalDatePill(
                 )
             )
             .border(1.2.dp, DialogGoldDark, RoundedCornerShape(28.dp))
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -526,7 +506,7 @@ private fun GoalColorOrb(
         modifier = Modifier
             .size(if (selected) 52.dp else 44.dp)
             .clip(CircleShape)
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Button, onClick = onClick)
     ) {
         Canvas(modifier = Modifier.matchParentSize()) {
             val radius = size.minDimension / 2f
@@ -601,11 +581,11 @@ private fun DialogTextButton(
 ) {
     Box(
         modifier = modifier
-            .height(52.dp)
+            .heightIn(min = 52.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(Color.Black.copy(alpha = 0.24f))
             .border(1.dp, DialogGoldDark, RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
+            .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -627,7 +607,7 @@ private fun DialogSaveButton(
 ) {
     Box(
         modifier = modifier
-            .height(52.dp)
+            .heightIn(min = 52.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(
                 if (enabled) {

@@ -57,4 +57,17 @@ class IntervalSliderMathTest {
         assertEquals("Every 5 minutes", IntervalSliderMath.formatLabel(300_000L))
         assertEquals("Every 1 hour", IntervalSliderMath.formatLabel(3_600_000L))
     }
+    @Test fun `fast drags and reverse crossings give feedback without repeated ticks`() {
+        val anchor = IntervalSliderMath.TICK_POSITIONS[2]
+        assertTrue(IntervalSliderMath.crossedTick(anchor - 0.1f, anchor + 0.1f))
+        assertTrue(IntervalSliderMath.crossedTick(anchor + 0.1f, anchor - 0.1f))
+        assertTrue(!IntervalSliderMath.crossedTick(anchor, anchor + 0.001f))
+        assertTrue(!IntervalSliderMath.crossedTick(anchor + 0.001f, anchor + 0.002f))
+    }
+
+    @Test fun `labels keep seconds for intervals between whole minutes`() {
+        assertEquals("Every 1m 5s", IntervalSliderMath.formatLabel(65_000L))
+        assertEquals("Every 2m 5s", IntervalSliderMath.formatLabel(125_000L))
+    }
+
 }

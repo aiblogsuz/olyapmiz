@@ -217,22 +217,6 @@ object UmrLayoutCompute {
     /** Milliseconds in one 7-day week (single source of truth for Umr math). */
     const val MS_PER_WEEK: Long = 7L * 24L * 60L * 60L * 1000L
 
-    /**
-     * Whole weeks elapsed from `birthdayMs` until `atMs` — the cell index on
-     * the life grid for a person's current week-of-life, or of an event
-     * relative to a birthday.
-     *
-     * Returns -1 when the birthday is unset (<= 0) or `atMs` predates it
-     * (a pre-birth event has no place on the grid).
-     *
-     * NOT clamped to ROWS*COLS — the counter band displays ages beyond the
-     * grid as text; drawing call sites must clamp when indexing cells.
-     */
-    fun weekIndexFor(birthdayMs: Long, atMs: Long): Int {
-        if (birthdayMs <= 0L || atMs < birthdayMs) return -1
-        return ((atMs - birthdayMs) / MS_PER_WEEK).toInt()
-    }
-
     /** Insert a wider horizontal gap every WEEKS_PER_GROUP columns so months read at a glance. */
     const val WEEKS_PER_GROUP = 4
 

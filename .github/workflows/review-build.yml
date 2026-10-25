@@ -1,0 +1,65 @@
+name: Review APK
+
+on:
+  push:
+    branches: [improve/calendar-reliability-ux]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lifedots-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - name: Run regression tests and lint
+        run: |
+          chmod +x gradlew
+          ./gradlew testReleaseUnitTest lintRelease --console=plain
+      - name: Save test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-test-evidence
+          path: |
+            app/build/reports/
+            app/build/test-results/
+      - name: Configure existing release signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_BASE64" && test -n "$STORE_PASSWORD" && test -n "$KEY_ALIAS" && test -n "$KEY_PASSWORD"
+          mkdir -p keystore
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > keystore/olyapmiz-release.jks
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          def escape(value):
+              return value.replace('\\', '\\\\').replace('\n', '\\n').replace('\r', '\\r').replace('=', '\\=').replace(':', '\\:')
+          values = {'storeFile': 'keystore/olyapmiz-release.jks', 'storePassword': os.environ['STORE_PASSWORD'], 'keyAlias': os.environ['KEY_ALIAS'], 'keyPassword': os.environ['KEY_PASSWORD']}
+          Path('keystore.properties').write_text('\n'.join(key + '=' + escape(value) for key, value in values.items()) + '\n')
+          PY
+      - name: Build compatible review update
+        run: ./gradlew assembleRelease -PappVersionCode=10400 -PappVersionName=1.4.0-review --console=plain
+      - name: Save signed APK without publishing a release
+        uses: actions/upload-artifact@v4
+        with:
+          name: lifedots-review-apk
+          path: app/build/outputs/apk/release/app-release.apk
+          retention-days: 14
+      - name: Remove temporary signing files
+        if: always()
+        run: rm -f keystore.properties keystore/olyapmiz-release.jks

@@ -17,3 +17,7 @@ keystore.properties
 
 # Graphify analysis output (generated tooling artifacts)
 graphify-out/
+
+# Local device evidence and build outputs
+/artifacts/
+**/build/

@@ -316,6 +316,12 @@ fun currentEffectiveMode(now: Long, settings: WallpaperSettings): TopViewMode {
     }
 }
 
+/** An explicit pick begins a new rotation interval immediately. */
+fun selectCalendar(settings: WallpaperSettings, mode: TopViewMode, now: Long): WallpaperSettings =
+    settings.copy(topViewMode = mode, autoSwitchSettings = settings.autoSwitchSettings.copy(
+        referenceMs = now, startMode = mode,
+    ))
+
 class LifeDotsPreferences(context: Context) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -379,15 +385,7 @@ class LifeDotsPreferences(context: Context) {
             editor.remove(KEY_CALENDAR_EVENT_DAY)
             editor.remove(KEY_CALENDAR_EVENT_COLOR)
         }
-        if (stored < 8) {
-            // v8: slider stays literal (0% = 0% offset, no baseline), but the
-            // saved value lands on 18% for everyone on first launch of this
-            // build. Fresh installs hit the data-class default of 18f; existing
-            // users get force-written to 18f here. Slider visibly reads 18%,
-            // calendar renders at 18% offset, users drag from there if they
-            // want a different position.
-            editor.putFloat(KEY_VERTICAL_OFFSET, 18f)
-        }
+        // Missing keys use defaults; upgrades never overwrite a saved position.
         if (stored < 9) {
             // v9: introduces Umr life view + Yil/Umr auto-switch. No destructive
             // writes — fresh installs and upgraders both pick up the data-class
@@ -412,16 +410,7 @@ class LifeDotsPreferences(context: Context) {
             if (!prefs.contains(KEY_UMR_TOTAL_WEEKS)) edit.putInt(KEY_UMR_TOTAL_WEEKS, 4000)
             edit.putInt(KEY_MIGRATION_VERSION, 11).apply()
         }
-        if (stored < 12) {
-            // v12: switch the Yil calendar week-start to Monday for everyone.
-            // The data class default also flips to true; this migration steamrolls
-            // any stored false from before the change. There's no UI surface for
-            // toggling this, so no user choice is being overridden.
-            prefs.edit()
-                .putBoolean(KEY_CALENDAR_MONDAY_FIRST, true)
-                .putInt(KEY_MIGRATION_VERSION, 12)
-                .apply()
-        }
+        // Week start uses a default only when absent, preserving explicit choices.
         editor.putInt(KEY_MIGRATION_VERSION, CURRENT_MIGRATION_VERSION).apply()
     }
 
@@ -741,6 +730,14 @@ class LifeDotsPreferences(context: Context) {
         notifyWallpaperChanged()
     }
 
+    fun setCalendarMondayFirst(mondayFirst: Boolean) {
+        prefs.edit().putBoolean(KEY_CALENDAR_MONDAY_FIRST, mondayFirst).apply()
+        _settingsFlow.value = settings.copy(
+            calendarViewSettings = settings.calendarViewSettings.copy(mondayFirst = mondayFirst)
+        )
+        notifyWallpaperChanged()
+    }
+
     fun setCalendarColumns(columns: Int) {
         prefs.edit().putInt(KEY_CALENDAR_COLUMNS, columns).apply()
         val newCalendar = _settingsFlow.value.calendarViewSettings.copy(columnsPerRow = columns)
@@ -1053,8 +1050,13 @@ class LifeDotsPreferences(context: Context) {
 
     // ===== Umr / TopViewMode / Auto-switch setters =====
     fun setTopViewMode(mode: TopViewMode) {
-        prefs.edit().putString(KEY_TOP_VIEW_MODE, mode.name).apply()
-        _settingsFlow.value = _settingsFlow.value.copy(topViewMode = mode)
+        val selected = selectCalendar(settings, mode, System.currentTimeMillis())
+        prefs.edit()
+            .putString(KEY_TOP_VIEW_MODE, mode.name)
+            .putLong(KEY_AUTO_SWITCH_REFERENCE_MS, selected.autoSwitchSettings.referenceMs)
+            .putString(KEY_AUTO_SWITCH_START_MODE, mode.name)
+            .apply()
+        _settingsFlow.value = selected
         notifyWallpaperChanged()
     }
 

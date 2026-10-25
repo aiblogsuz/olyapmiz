@@ -1,75 +1,72 @@
 package com.example.lifedots.ui.components
 
-import android.media.AudioManager
-import android.media.ToneGenerator
-import android.os.Handler
-import android.os.Looper
-import android.view.HapticFeedbackConstants
-import android.view.View
+import android.view.SoundEffectConstants
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 
 /**
- * User-interaction feedback channel: haptics + (optionally) a soft system
- * tone. Settings surface three interaction kinds:
+ * Centralized haptic + sound feedback for interactive elements.
  *
- *  - [click]   — taps on buttons/cards/pills
- *  - [tick]    — crossing an anchor while dragging a slider
- *  - [confirm] — committing a value (slider released, item saved)
+ * Three feedback levels:
+ *  - click(): light tick (TextHandleMove) + system CLICK sound — buttons, chips, cards
+ *  - confirm(): stronger tick (LongPress) + system CLICK — toggles, save button
+ *  - tick(): soft tick only, no sound — slider drag (would be noisy)
  *
- * Both channels honour the user's soundsEnabled / vibrationsEnabled
- * toggles; a disabled channel is a silent no-op.
+ * Both haptic and sound are gated by the user's settings
+ * (soundsEnabled / vibrationsEnabled). Sounds also respect the
+ * system Touch Sounds setting (playSoundEffect is a no-op if the
+ * OS-level Touch Sounds is off). Our toggle is additive on top.
  */
-interface UxFeedback {
-    fun click()
-    fun tick()
-    fun confirm()
-}
+class UxFeedback internal constructor(
+    private val haptic: HapticFeedback,
+    private val playSound: (effect: Int) -> Unit,
+    private val soundsEnabled: () -> Boolean,
+    private val vibrationsEnabled: () -> Boolean,
+) {
+    fun click() {
+        if (vibrationsEnabled()) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        if (soundsEnabled()) playSound(SoundEffectConstants.CLICK)
+    }
 
-/**
- * Remembers a [UxFeedback] bound to the current view + audio manager.
- * Re-created only when the toggles (or the view) change.
- */
-@Composable
-fun rememberUxFeedback(soundsEnabled: Boolean, vibrationsEnabled: Boolean): UxFeedback {
-    val view = LocalView.current
-    val context = LocalContext.current
-    return remember(soundsEnabled, vibrationsEnabled, view, context) {
-        object : UxFeedback {
-            private fun haptic(constant: Int) {
-                if (!vibrationsEnabled) return
-                runCatching { view.performHapticFeedback(constant) }
-            }
+    fun confirm() {
+        if (vibrationsEnabled()) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        if (soundsEnabled()) playSound(SoundEffectConstants.CLICK)
+    }
 
-            private fun tone(tone: Int, durationMs: Int) {
-                if (!soundsEnabled) return
-                runCatching {
-                    val generator = ToneGenerator(AudioManager.STREAM_SYSTEM, VOLUME)
-                    generator.startTone(tone, durationMs)
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        runCatching { generator.release() }
-                    }, durationMs + RELEASE_DELAY_MS)
-                }
-            }
-
-            override fun click() {
-                haptic(HapticFeedbackConstants.KEYBOARD_TAP)
-                tone(ToneGenerator.TONE_PROP_ACK, 30)
-            }
-
-            override fun tick() {
-                haptic(HapticFeedbackConstants.CLOCK_TICK)
-            }
-
-            override fun confirm() {
-                haptic(HapticFeedbackConstants.KEYBOARD_TAP)
-                tone(ToneGenerator.TONE_PROP_BEEP, 60)
-            }
-        }
+    fun tick() {
+        if (vibrationsEnabled()) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
 }
 
-private const val VOLUME = 40
-private const val RELEASE_DELAY_MS = 80L
+/**
+ * Compose helper: returns a UxFeedback instance bound to the current
+ * haptic + view + the live values of soundsEnabled / vibrationsEnabled.
+ *
+ * The boolean params are captured by the lambdas inside `remember`,
+ * so a settings change triggers recomposition and a fresh UxFeedback
+ * instance with the latest values.
+ *
+ * Usage:
+ *   val feedback = rememberUxFeedback(settings.soundsEnabled, settings.vibrationsEnabled)
+ *   Button(onClick = { feedback.click(); doThing() }) { ... }
+ */
+@Composable
+fun rememberUxFeedback(
+    soundsEnabled: Boolean,
+    vibrationsEnabled: Boolean,
+): UxFeedback {
+    val haptic = LocalHapticFeedback.current
+    val view = LocalView.current
+    return remember(haptic, view, soundsEnabled, vibrationsEnabled) {
+        UxFeedback(
+            haptic = haptic,
+            playSound = { effect -> view.playSoundEffect(effect) },
+            soundsEnabled = { soundsEnabled },
+            vibrationsEnabled = { vibrationsEnabled },
+        )
+    }
+}

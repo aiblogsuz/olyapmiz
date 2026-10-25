@@ -14,7 +14,8 @@ import android.graphics.Color
 import com.example.lifedots.preferences.LifeDotsPreferences
 import com.example.lifedots.preferences.WallpaperApplyMode
 import com.example.lifedots.service.KeepAliveService
-import com.example.lifedots.wallpaper.SnapshotRenderer
+import com.example.lifedots.wallpaper.LockWallpaperController
+import java.util.concurrent.Executors
 import java.util.Calendar
 
 /**
@@ -38,6 +39,7 @@ class DateChangeReceiver : BroadcastReceiver() {
                 Log.i("LifeDots", "${intent.action} — scheduling daily refresh alarm")
                 scheduleDailyAlarm(context)
                 maybeStartKeepAlive(context)
+                refreshLockSnapshotIfNeeded(context)
                 // Note: auto-switch alarm is intentionally NOT re-armed here. The engine's
                 // process isn't necessarily running at BOOT_COMPLETED time, so the listener
                 // chain wouldn't reach the rotator. The rotator arms itself on the first
@@ -104,25 +106,20 @@ class DateChangeReceiver : BroadcastReceiver() {
      * be silently pushing a wallpaper the user never asked for.
      */
     private fun refreshLockSnapshotIfNeeded(context: Context) {
-        try {
-            val prefs = LifeDotsPreferences.getInstance(context)
-            if (prefs.settings.applyMode != WallpaperApplyMode.CALENDAR_LOCK_BLACK_HOME) return
-            val wm = WallpaperManager.getInstance(context)
-            val existing = wm.getWallpaperFile(WallpaperManager.FLAG_LOCK) ?: return
-            existing.close()
-            val metrics = context.resources.displayMetrics
-            val snapshot = SnapshotRenderer.render(context, metrics.widthPixels, metrics.heightPixels)
-            val black = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply {
-                eraseColor(Color.BLACK)
+        val pending = goAsync()
+        refreshExecutor.execute {
+            try {
+                LockWallpaperController.refreshIfOwned(context.applicationContext)
+            } catch (error: Exception) {
+                Log.w("LifeDots", "Daily lock snapshot refresh failed", error)
+            } finally {
+                pending.finish()
             }
-            wm.setBitmap(snapshot, null, true, WallpaperManager.FLAG_LOCK)
-            wm.setBitmap(black, null, true, WallpaperManager.FLAG_SYSTEM)
-        } catch (e: Exception) {
-            Log.w("LifeDots", "Daily lock snapshot refresh failed", e)
         }
     }
 
     companion object {
+        private val refreshExecutor = Executors.newSingleThreadExecutor()
         const val ACTION_DAILY_TICK = "com.example.lifedots.DAILY_TICK"
         const val ACTION_AUTO_SWITCH_TICK = "com.example.lifedots.AUTO_SWITCH_TICK"
 
