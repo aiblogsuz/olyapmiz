@@ -28,7 +28,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -99,7 +98,6 @@ import com.example.lifedots.updater.UpdateInfo
 import com.example.lifedots.updater.UpdateInstaller
 import com.example.lifedots.updater.UpdateNotifier
 import com.example.lifedots.wallpaper.LifeDotsWallpaperService
-import com.example.lifedots.wallpaper.SnapshotRenderer
 import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.math.PI

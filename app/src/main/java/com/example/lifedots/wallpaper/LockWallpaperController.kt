@@ -30,7 +30,9 @@ object LockWallpaperController {
         try {
             // Render first. Changing home first avoids Android copying the old home
             // wallpaper over the freshly applied lock image on some devices.
-            wm.setBitmap(black, null, true, WallpaperManager.FLAG_SYSTEM)
+            check(wm.setBitmap(black, null, true, WallpaperManager.FLAG_SYSTEM) > 0) {
+                "Android did not confirm the home wallpaper."
+            }
             homeChanged = true
             val id = wm.setBitmap(snapshot, null, true, WallpaperManager.FLAG_LOCK)
             check(id > 0) { "Android did not confirm the lock-screen wallpaper." }

@@ -20,7 +20,7 @@ class SavedCalendarTest {
         val first = LifeDotsPreferences(context).settings
         val reopened = LifeDotsPreferences(context).settings
         assertEquals(ViewMode.MONTHLY, first.viewModeSettings.mode)
-        assertEquals(-12f, first.positionSettings.verticalOffset)
+        assertEquals(-12f, first.positionSettings.verticalOffset, 0f)
         assertFalse(first.calendarViewSettings.mondayFirst)
         assertFalse(first.viewModeSettings.showMonthLabels)
         assertEquals(first, reopened)

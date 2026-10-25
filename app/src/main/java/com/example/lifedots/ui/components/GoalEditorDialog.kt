@@ -31,7 +31,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -56,13 +55,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.lifedots.preferences.Goal
-import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Calendar
 import java.util.Date
-import java.util.Locale
 import java.util.UUID
 
 private val DialogInk = Color(0xFF151008)
@@ -97,7 +94,7 @@ fun GoalEditorDialog(
         val d = dayText.toIntOrNull()
         val m = monthText.toIntOrNull()
         val y = yearText.toIntOrNull()
-        if (d == null || m == null || y == null) null
+        if (d == null || m == null || y == null || yearText.length != 4 || y !in 1..9999) null
         else runCatching { LocalDate.of(y, m, d) }.getOrNull()
     }
     val presetColors = listOf(
