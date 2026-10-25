@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.lifedots.preferences.Event
 import com.example.lifedots.preferences.Goal
 import java.text.SimpleDateFormat
 import java.time.Instant
@@ -66,6 +67,40 @@ private val DialogGoldDark = Color(0xFF5D421F)
 private val PaperBase = Color(0xFFC7B083)
 private val PaperLight = Color(0xFFE1CFA2)
 private val PaperInk = Color(0xFF1E160B)
+
+/**
+ * Event editor — a thin re-brand of [GoalEditorDialog] for Umr events.
+ * Events and goals share the same data shape (title / target date / colour),
+ * so the editor reuses the goal dialog and converts at the boundary. This
+ * keeps the two types distinct in preferences (they never bleed into each
+ * other) while presenting the right copy ("Add Event", "Event Title").
+ */
+@Composable
+fun EventEditorDialog(
+    event: Event? = null,
+    onSave: (Event) -> Unit,
+    onDelete: (() -> Unit)? = null,
+    onDismiss: () -> Unit,
+) {
+    GoalEditorDialog(
+        goal = event?.let {
+            Goal(id = it.id, title = it.title, targetDate = it.targetDate, color = it.color)
+        },
+        onSave = { saved ->
+            onSave(
+                Event(
+                    id = saved.id,
+                    title = saved.title,
+                    targetDate = saved.targetDate,
+                    color = saved.color,
+                )
+            )
+        },
+        onDelete = onDelete,
+        onDismiss = onDismiss,
+        isEvent = true,
+    )
+}
 
 @Composable
 fun GoalEditorDialog(

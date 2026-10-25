@@ -56,15 +56,20 @@ fun DatePickerDialog(
     var selectedMonth by remember { mutableIntStateOf(initialCalendar.get(Calendar.MONTH)) }
     var selectedDay by remember { mutableIntStateOf(initialCalendar.get(Calendar.DAY_OF_MONTH)) }
 
+    fun daysInMonthOf(year: Int, month: Int): Int {
+        val cal = Calendar.getInstance()
+        cal.clear()
+        cal.set(year, month, 1)
+        return cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+    }
+
     val monthNames = listOf(
         "January", "February", "March", "April", "May", "June",
         "July", "August", "September", "October", "November", "December"
     )
 
     val daysInMonth = remember(selectedYear, selectedMonth) {
-        val cal = Calendar.getInstance()
-        cal.set(selectedYear, selectedMonth, 1)
-        cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+        daysInMonthOf(selectedYear, selectedMonth)
     }
 
     val firstDayOfWeek = remember(selectedYear, selectedMonth) {
@@ -108,7 +113,9 @@ fun DatePickerDialog(
                             } else {
                                 selectedMonth--
                             }
-                            selectedDay = minOf(selectedDay, daysInMonth)
+                            // Clamp against the NEW month — the remembered
+                            // daysInMonth is still the previous month's here.
+                            selectedDay = minOf(selectedDay, daysInMonthOf(selectedYear, selectedMonth))
                         }
                     ) {
                         Text("<", fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -129,7 +136,7 @@ fun DatePickerDialog(
                             } else {
                                 selectedMonth++
                             }
-                            selectedDay = minOf(selectedDay, daysInMonth)
+                            selectedDay = minOf(selectedDay, daysInMonthOf(selectedYear, selectedMonth))
                         }
                     ) {
                         Text(">", fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -214,8 +221,17 @@ fun DatePickerDialog(
 
                     Button(
                         onClick = {
+                            // Clamp again at save time so a stale selection can
+                            // never roll over via Calendar's lenient math
+                            // (e.g. Feb 31 silently becoming Mar 3).
                             val calendar = Calendar.getInstance()
-                            calendar.set(selectedYear, selectedMonth, selectedDay, 0, 0, 0)
+                            calendar.clear()
+                            calendar.set(
+                                selectedYear,
+                                selectedMonth,
+                                selectedDay.coerceAtMost(daysInMonthOf(selectedYear, selectedMonth)),
+                                0, 0, 0,
+                            )
                             calendar.set(Calendar.MILLISECOND, 0)
                             onDateSelected(calendar.timeInMillis)
                         }

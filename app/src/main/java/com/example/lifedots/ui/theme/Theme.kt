@@ -1,6 +1,7 @@
 package com.example.lifedots.ui.theme
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -43,13 +44,16 @@ private val BrandDarkColorScheme = darkColorScheme(
     onError = BrandColors.OffWhite,
 )
 
+/** Material type scale — brand uses system fonts with the dark scheme. */
+val AppTypography = Typography()
+
 @Composable
 fun LifeDotsTheme(
     content: @Composable () -> Unit,
 ) {
     MaterialTheme(
         colorScheme = BrandDarkColorScheme,
-        typography = Typography,
+        typography = AppTypography,
         content = content,
     )
 }

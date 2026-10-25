@@ -105,6 +105,17 @@ object SnapshotRenderer {
         val gridLeft = layout.paddingXPx + (availWidth - (cols * monthBoxW + (cols - 1) * monthMargin)) / 2f
         val gridTop = layout.safeTopPx
 
+        // Mirror the live engine: the whole grid responds to the user's
+        // Yil position/scale sliders, so the lock-screen snapshot matches
+        // what the home screen shows.
+        val position = settings.positionSettings
+        canvas.save()
+        canvas.translate(
+            widthPx * (position.horizontalOffset / 100f),
+            heightPx * (position.verticalOffset / 100f),
+        )
+        canvas.scale(position.scale, position.scale)
+
         val filled = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = themeFilledDot(settings)
             alpha = (settings.filledDotAlpha * 255f).toInt().coerceIn(0, 255)
@@ -152,6 +163,8 @@ object SnapshotRenderer {
                 canvas.drawCircle(cx, cy, r, paint)
             }
         }
+
+        canvas.restore()
     }
 
     private fun drawUmrSnapshot(
@@ -161,6 +174,9 @@ object SnapshotRenderer {
         heightPx: Int,
         now: Long,
     ) {
+        // Snapshot path has no WindowInsets access; the 22–28% aspect-driven
+        // safe-top already reserves the lockscreen clock band, so zeros here
+        // are the engine's own lock-screen reality, not an omission.
         val layout = UmrLayoutCompute.compute(
             widthPx = widthPx,
             heightPx = heightPx,
@@ -189,10 +205,9 @@ object SnapshotRenderer {
         canvas.scale(position.scale, position.scale)
 
         val birthdayMs = settings.umrSettings.birthdayEpochMs
-        val msPerWeek = 7L * 24L * 60L * 60L * 1000L
         val totalCells = UmrLayoutCompute.ROWS * UmrLayoutCompute.COLS
         val weeksLived = if (birthdayMs != 0L && now >= birthdayMs) {
-            ((now - birthdayMs) / msPerWeek).toInt().coerceAtMost(totalCells - 1)
+            ((now - birthdayMs) / UmrLayoutCompute.MS_PER_WEEK).toInt().coerceAtMost(totalCells - 1)
         } else -1
         if (weeksLived in 0 until totalCells) {
             drawYearRowGradient(canvas, layout, filledColor, weeksLived)
@@ -239,6 +254,7 @@ object SnapshotRenderer {
         if (settings.eventSettings.enabled) {
             for (event in settings.eventSettings.events) {
                 val cell = weekIndexFor(birthdayMs, event.targetDate)
+                    .coerceAtMost(totalCells - 1)
                 if (cell < 0) continue
                 val (cx, cy) = UmrLayoutCompute.cellCenter(layout, cell)
                 drawEventMarker(canvas, cx, cy, r, event.color, isX, layout)
@@ -285,7 +301,9 @@ object SnapshotRenderer {
         color: Int,
         isX: Boolean,
     ) {
-        val cell = weekIndexFor(birthdayMs, now)
+        val cell = weekIndexFor(birthdayMs, now).coerceAtMost(
+            UmrLayoutCompute.ROWS * UmrLayoutCompute.COLS - 1
+        )
         if (cell < 0) return
         val (cx, cy) = UmrLayoutCompute.cellCenter(layout, cell)
         val r = layout.dotSizePx / 2f

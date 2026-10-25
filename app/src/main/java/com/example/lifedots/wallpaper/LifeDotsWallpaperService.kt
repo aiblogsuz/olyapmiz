@@ -875,7 +875,7 @@ class LifeDotsWallpaperService : WallpaperService() {
         private fun drawUmrView(canvas: Canvas, settings: WallpaperSettings, colors: ThemeColors, now: Long) {
             val birthdayMs = settings.umrSettings.birthdayEpochMs
 
-            val msPerWeek = 7L * 24L * 60L * 60L * 1000L
+            val msPerWeek = UmrLayoutCompute.MS_PER_WEEK
             val totalCells = UmrLayoutCompute.ROWS * UmrLayoutCompute.COLS  // 4160
             val weeksLived = if (birthdayMs != 0L && now >= birthdayMs)
                 ((now - birthdayMs) / msPerWeek).toInt().coerceAtMost(totalCells - 1)
@@ -886,10 +886,10 @@ class LifeDotsWallpaperService : WallpaperService() {
                 heightPx = canvas.height,
                 topOffsetPx = 0f,
                 bottomOffsetPx = 0f,
-                systemSafeInsetTopPx = 0,
-                systemSafeInsetBottomPx = 0,
-                systemSafeInsetLeftPx = 0,
-                systemSafeInsetRightPx = 0,
+                systemSafeInsetTopPx = systemSafeInsetTop,
+                systemSafeInsetBottomPx = systemSafeInsetBottom,
+                systemSafeInsetLeftPx = systemSafeInsetLeft,
+                systemSafeInsetRightPx = systemSafeInsetRight,
             )
 
             // Background
@@ -1059,6 +1059,7 @@ class LifeDotsWallpaperService : WallpaperService() {
             val isX = settings.umrSettings.visualMode == UmrVisualMode.X_MARKS
 
             val momCell = weekIndexFor(settings.umrSettings.momBirthdayEpochMs, now)
+                .coerceAtMost(totalCells - 1)
             if (momCell >= 0) {
                 val (cx, cy) = UmrLayoutCompute.cellCenter(layout, momCell)
                 canvas.drawCircle(cx, cy, glowRadius, umrMomGlowPaint)
@@ -1071,6 +1072,7 @@ class LifeDotsWallpaperService : WallpaperService() {
                 }
             }
             val dadCell = weekIndexFor(settings.umrSettings.dadBirthdayEpochMs, now)
+                .coerceAtMost(totalCells - 1)
             if (dadCell >= 0) {
                 val (cx, cy) = UmrLayoutCompute.cellCenter(layout, dadCell)
                 canvas.drawCircle(cx, cy, glowRadius, umrDadGlowPaint)
@@ -1092,6 +1094,7 @@ class LifeDotsWallpaperService : WallpaperService() {
                 val eventGlowBlur = BlurMaskFilter(layout.dotSizePx * 1.6f, BlurMaskFilter.Blur.NORMAL)
                 for (event in settings.eventSettings.events) {
                     val cell = weekIndexFor(birthdayMs, event.targetDate)
+                        .coerceAtMost(totalCells - 1)
                     if (cell < 0) continue
                     val (cx, cy) = UmrLayoutCompute.cellCenter(layout, cell)
                     // 1. Glow halo
@@ -1132,7 +1135,7 @@ class LifeDotsWallpaperService : WallpaperService() {
                     val swatchRadius = textSize * 0.30f
                     val leftPad = layout.gridLeftPx + textSize * 0.4f
                     val swatchToText = textSize * 0.9f
-                    val weekMs = 7L * 24L * 60L * 60L * 1000L
+                    val weekMs = UmrLayoutCompute.MS_PER_WEEK
                     futureEvents.forEachIndexed { idx, event ->
                         val y = startY + idx * lineHeight
                         if (y > canvas.height - 32f) return@forEachIndexed
