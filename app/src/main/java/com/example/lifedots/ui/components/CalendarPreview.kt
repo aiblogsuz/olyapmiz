@@ -5,10 +5,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -99,17 +99,24 @@ fun CalendarPreview(settings: WallpaperSettings, modifier: Modifier = Modifier) 
     }
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(modifier = Modifier.fillMaxWidth(0.72f).heightIn(max = 440.dp)
-            .aspectRatio(width.toFloat() / height).clip(RoundedCornerShape(16.dp))
-            .background(Color.Black), contentAlignment = Alignment.Center) {
-            val bitmap = preview
-            if (bitmap != null) {
-                Image(bitmap.asImageBitmap(), contentDescription = "Saved ${settings.topViewMode.name.lowercase()} calendar preview",
-                    modifier = Modifier.matchParentSize(), contentScale = ContentScale.Fit)
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            // Resolve both dimensions before measurement. Combining an exact width with a
+            // maximum height and aspectRatio can make Compose draw beyond its reported bounds.
+            val aspect = width.toFloat() / height
+            val previewWidth = minOf(maxWidth * 0.72f, 380.dp * aspect)
+            val previewHeight = previewWidth / aspect
+            Box(modifier = Modifier.size(width = previewWidth, height = previewHeight)
+                .clip(RoundedCornerShape(16.dp)).background(Color.Black),
+                contentAlignment = Alignment.Center) {
+                val bitmap = preview
+                if (bitmap != null) {
+                    Image(bitmap.asImageBitmap(), contentDescription = "Saved ${settings.topViewMode.name.lowercase()} calendar preview",
+                        modifier = Modifier.matchParentSize(), contentScale = ContentScale.Fit)
+                }
+                if (rendering) CircularProgressIndicator(color = Color(0xFFC5A266))
+                if (previewError) Text("Preview unavailable. Try reopening this screen.", color = Color.White,
+                    modifier = Modifier.padding(16.dp))
             }
-            if (rendering) CircularProgressIndicator(color = Color(0xFFC5A266))
-            if (previewError) Text("Preview unavailable. Try reopening this screen.", color = Color.White,
-                modifier = Modifier.padding(16.dp))
         }
         Text(if (settings.topViewMode == TopViewMode.UMR && settings.umrSettings.birthdayEpochMs == 0L)
             "Add your birthday in Customize to build your life calendar."
