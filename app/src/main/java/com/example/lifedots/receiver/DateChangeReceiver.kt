@@ -11,10 +11,12 @@ import android.os.PowerManager
 import android.util.Log
 import android.graphics.Bitmap
 import android.graphics.Color
+import com.example.lifedots.preferences.isUserUnlocked
 import com.example.lifedots.preferences.LifeDotsPreferences
 import com.example.lifedots.preferences.WallpaperApplyMode
 import com.example.lifedots.service.KeepAliveService
-import com.example.lifedots.wallpaper.SnapshotRenderer
+import com.example.lifedots.wallpaper.LockWallpaperController
+import java.util.concurrent.Executors
 import java.util.Calendar
 
 /**
@@ -31,13 +33,26 @@ import java.util.Calendar
 class DateChangeReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        if (!isUserUnlocked(context)) {
+            // Direct Boot may access only device-protected storage and safe system services.
+            // The OS restores the selected live wallpaper; no CE settings or foreground service here.
+            if (intent.action in setOf(Intent.ACTION_LOCKED_BOOT_COMPLETED, Intent.ACTION_BOOT_COMPLETED,
+                Intent.ACTION_MY_PACKAGE_REPLACED, "android.intent.action.QUICKBOOT_POWERON", ACTION_DAILY_TICK,
+                Intent.ACTION_DATE_CHANGED, Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_TIME_CHANGED)) {
+                scheduleDailyAlarm(context.createDeviceProtectedStorageContext())
+            }
+            return
+        }
         when (intent.action) {
+            Intent.ACTION_LOCKED_BOOT_COMPLETED,
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED,
             "android.intent.action.QUICKBOOT_POWERON" -> {
                 Log.i("LifeDots", "${intent.action} — scheduling daily refresh alarm")
                 scheduleDailyAlarm(context)
+                pokeAutoSwitchRedraw(context)
                 maybeStartKeepAlive(context)
+                refreshLockSnapshotIfNeeded(context)
                 // Note: auto-switch alarm is intentionally NOT re-armed here. The engine's
                 // process isn't necessarily running at BOOT_COMPLETED time, so the listener
                 // chain wouldn't reach the rotator. The rotator arms itself on the first
@@ -104,25 +119,20 @@ class DateChangeReceiver : BroadcastReceiver() {
      * be silently pushing a wallpaper the user never asked for.
      */
     private fun refreshLockSnapshotIfNeeded(context: Context) {
-        try {
-            val prefs = LifeDotsPreferences.getInstance(context)
-            if (prefs.settings.applyMode != WallpaperApplyMode.CALENDAR_LOCK_BLACK_HOME) return
-            val wm = WallpaperManager.getInstance(context)
-            val existing = wm.getWallpaperFile(WallpaperManager.FLAG_LOCK) ?: return
-            existing.close()
-            val metrics = context.resources.displayMetrics
-            val snapshot = SnapshotRenderer.render(context, metrics.widthPixels, metrics.heightPixels)
-            val black = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply {
-                eraseColor(Color.BLACK)
+        val pending = goAsync()
+        refreshExecutor.execute {
+            try {
+                LockWallpaperController.refreshIfOwned(context.applicationContext)
+            } catch (error: Exception) {
+                Log.w("LifeDots", "Daily lock snapshot refresh failed", error)
+            } finally {
+                pending.finish()
             }
-            wm.setBitmap(snapshot, null, true, WallpaperManager.FLAG_LOCK)
-            wm.setBitmap(black, null, true, WallpaperManager.FLAG_SYSTEM)
-        } catch (e: Exception) {
-            Log.w("LifeDots", "Daily lock snapshot refresh failed", e)
         }
     }
 
     companion object {
+        private val refreshExecutor = Executors.newSingleThreadExecutor()
         const val ACTION_DAILY_TICK = "com.example.lifedots.DAILY_TICK"
         const val ACTION_AUTO_SWITCH_TICK = "com.example.lifedots.AUTO_SWITCH_TICK"
 

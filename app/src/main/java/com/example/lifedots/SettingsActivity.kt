@@ -5,16 +5,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +18,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.example.lifedots.ui.components.BirthdayDraft
+import com.example.lifedots.ui.components.CalendarPreview
+import com.example.lifedots.ui.components.calendarSelectionSummary
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,14 +40,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -55,13 +54,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.core.view.WindowCompat
-import com.example.lifedots.ui.components.BirthdayEditor
 import com.example.lifedots.ui.components.IntervalSlider
-import com.example.lifedots.ui.components.PressableCard
 import com.example.lifedots.ui.components.rememberUxFeedback
 import com.example.lifedots.ui.theme.BrandColors
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -80,9 +76,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,7 +84,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.lifedots.preferences.AnimationType
 import com.example.lifedots.preferences.DotShape
-import com.example.lifedots.preferences.DotSize
 import com.example.lifedots.preferences.DotStyle
 import com.example.lifedots.preferences.FluidStyle
 import com.example.lifedots.preferences.GlassStyle
@@ -99,7 +91,6 @@ import com.example.lifedots.preferences.Event
 import com.example.lifedots.preferences.Goal
 import com.example.lifedots.preferences.GoalPosition
 import com.example.lifedots.ui.components.EventEditorDialog
-import com.example.lifedots.preferences.GridDensity
 import com.example.lifedots.preferences.LifeDotsPreferences
 import com.example.lifedots.preferences.TextAlignment
 import com.example.lifedots.preferences.ThemeOption
@@ -107,12 +98,10 @@ import com.example.lifedots.preferences.TopViewMode
 import com.example.lifedots.preferences.UmrVisualMode
 import com.example.lifedots.preferences.TreeStyle
 import com.example.lifedots.preferences.ViewMode
-import com.example.lifedots.preferences.VisualTheme
 import com.example.lifedots.preferences.WallpaperApplyMode
 import com.example.lifedots.preferences.WallpaperSettings
 import com.example.lifedots.ui.components.DateNumberInputs
 import com.example.lifedots.ui.components.GoalEditorDialog
-import com.example.lifedots.ui.components.ModeTogglePill
 import com.example.lifedots.ui.components.WhoTab
 import com.example.lifedots.ui.components.WhoTabs
 import com.example.lifedots.ui.theme.LifeDotsTheme
@@ -171,20 +160,22 @@ fun SettingsScreen(
     val settings by preferences.settingsFlow.collectAsState()
     val scope = rememberCoroutineScope()
 
-    var showGoalEditor by remember { mutableStateOf(false) }
-    var editingGoal by remember { mutableStateOf<Goal?>(null) }
-    var showEventEditor by remember { mutableStateOf(false) }
-    var editingEvent by remember { mutableStateOf<Event?>(null) }
+    var showGoalEditor by rememberSaveable { mutableStateOf(false) }
+    var editingGoalId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showEventEditor by rememberSaveable { mutableStateOf(false) }
+    var editingEventId by rememberSaveable { mutableStateOf<String?>(null) }
+    val editingGoal = settings.goalSettings.goals.firstOrNull { it.id == editingGoalId }
+    val editingEvent = settings.eventSettings.events.firstOrNull { it.id == editingEventId }
 
     ModernSettingsContent(
         settings = settings,
         preferences = preferences,
         snackbarHostState = snackbarHostState,
         scope = scope,
-        onAddGoal = { editingGoal = null; showGoalEditor = true },
-        onEditGoal = { goal -> editingGoal = goal; showGoalEditor = true },
-        onAddEvent = { editingEvent = null; showEventEditor = true },
-        onEditEvent = { event -> editingEvent = event; showEventEditor = true },
+        onAddGoal = { editingGoalId = null; showGoalEditor = true },
+        onEditGoal = { goal -> editingGoalId = goal.id; showGoalEditor = true },
+        onAddEvent = { editingEventId = null; showEventEditor = true },
+        onEditEvent = { event -> editingEventId = event.id; showEventEditor = true },
         modifier = modifier,
     )
 
@@ -201,7 +192,7 @@ fun SettingsScreen(
             onDelete = editingEvent?.let { { preferences.deleteEvent(it.id) } },
             onDismiss = {
                 showEventEditor = false
-                editingEvent = null
+                editingEventId = null
             },
         )
     }
@@ -219,7 +210,7 @@ fun SettingsScreen(
             onDelete = editingGoal?.let { { preferences.deleteGoal(it.id) } },
             onDismiss = {
                 showGoalEditor = false
-                editingGoal = null
+                editingGoalId = null
             }
         )
     }
@@ -261,17 +252,8 @@ internal fun ModernSettingsContent(
     modifier: Modifier = Modifier,
 ) {
     val feedback = rememberUxFeedback(settings.soundsEnabled, settings.vibrationsEnabled)
-    var showLifeDataEditor by remember { mutableStateOf(false) }
-    var editingWho by remember { mutableStateOf(WhoTab.ME) }
-
-    LaunchedEffect(settings.viewModeSettings.mode, settings.viewModeSettings.showMonthLabels) {
-        if (settings.viewModeSettings.mode != ViewMode.CALENDAR) {
-            preferences.setViewMode(ViewMode.CALENDAR)
-        }
-        if (!settings.viewModeSettings.showMonthLabels) {
-            preferences.setShowMonthLabels(true)
-        }
-    }
+    var showLifeDataEditor by rememberSaveable { mutableStateOf(false) }
+    var editingWho by rememberSaveable { mutableStateOf(WhoTab.ME) }
 
     LazyColumn(
         modifier = modifier
@@ -297,7 +279,16 @@ internal fun ModernSettingsContent(
         }
 
         item {
-            ModernAutoSwitchCard(
+            Text(calendarSelectionSummary(settings), color = ModernTextMuted, fontSize = 14.sp,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp))
+            CalendarPreview(settings = settings, modifier = Modifier.fillMaxWidth())
+        }
+
+        item {
+            if (settings.applyMode == WallpaperApplyMode.CALENDAR_LOCK_BLACK_HOME) {
+                Text("Lock-screen image refreshes daily; automatic switching requires live wallpaper.",
+                    color = ModernTextMuted, fontSize = 14.sp, modifier = Modifier.padding(8.dp))
+            } else ModernAutoSwitchCard(
                 settings = settings,
                 onEnabledChange = { wantOn ->
                     if (wantOn && settings.umrSettings.birthdayEpochMs == 0L) {
@@ -313,10 +304,7 @@ internal fun ModernSettingsContent(
                         preferences.setAutoSwitchEnabled(wantOn)
                     }
                 },
-                onIntervalChange = { ms ->
-                    feedback.tick()
-                    preferences.setAutoSwitchIntervalMs(ms)
-                },
+                onIntervalChange = { ms -> preferences.setAutoSwitchIntervalMs(ms) },
             )
         }
 
@@ -328,12 +316,13 @@ internal fun ModernSettingsContent(
                     icon = SettingIcon.Phone,
                     title = "Lock screen only",
                     subtitle = if (isLockOnly)
-                        "Calendar on lock, black home — refreshes daily"
+                        "Calendar on lock, black home. Tap Set as Wallpaper to apply."
                     else
                         "Use the live wallpaper on both screens",
                     trailing = {
                         ModernSwitch(
                             checked = isLockOnly,
+                                label = "Lock screen only",
                             onCheckedChange = { wantLockOnly ->
                                 feedback.confirm()
                                 preferences.setApplyMode(
@@ -454,6 +443,7 @@ internal fun ModernSettingsContent(
                         trailing = {
                             ModernSwitch(
                                 checked = settings.highlightToday,
+                                label = "Highlight today",
                                 onCheckedChange = { preferences.setHighlightToday(it) },
                             )
                         },
@@ -466,17 +456,20 @@ internal fun ModernSettingsContent(
             item {
                 ModernSectionTitle("VIEW MODE")
                 ModernPanelCard {
-                    ModernSelectPill(
-                        icon = SettingIcon.Grid,
-                        label = "Year",
-                        selected = true,
-                        onClick = {
-                            preferences.setViewMode(ViewMode.CALENDAR)
-                            preferences.setShowMonthLabels(true)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(ViewMode.CALENDAR to "Calendar", ViewMode.MONTHLY to "Monthly grid",
+                            ViewMode.CONTINUOUS to "Continuous grid").forEach { (mode, label) ->
+                            ModernSelectPill(icon = SettingIcon.Grid, label = label,
+                                selected = settings.viewModeSettings.mode == mode,
+                                onClick = { preferences.setViewMode(mode) }, modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                    ModernSettingRow(title = "Month labels", subtitle = "Show each month's name",
+                        trailing = { ModernSwitch(checked = settings.viewModeSettings.showMonthLabels,
+                            onCheckedChange = { preferences.setShowMonthLabels(it) }, label = "Month labels") })
+                    ModernSettingRow(title = "Monday first", subtitle = "Start each week on Monday",
+                        trailing = { ModernSwitch(checked = settings.calendarViewSettings.mondayFirst,
+                            onCheckedChange = { preferences.setCalendarMondayFirst(it) }, label = "Monday first") })
                     ModernDivider(top = 16.dp, bottom = 14.dp)
 
                     Text(
@@ -502,6 +495,12 @@ internal fun ModernSettingsContent(
                             columns = 3,
                             selected = settings.calendarViewSettings.columnsPerRow == 3,
                             onClick = { preferences.setCalendarColumns(3) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        ModernColumnOption(
+                            label = "4 × 3", columns = 4,
+                            selected = settings.calendarViewSettings.columnsPerRow == 4,
+                            onClick = { preferences.setCalendarColumns(4) },
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -581,6 +580,7 @@ internal fun ModernSettingsContent(
                         trailing = {
                             ModernSwitch(
                                 checked = settings.goalSettings.enabled,
+                                label = "Goals",
                                 onCheckedChange = { preferences.setGoalsEnabled(it) },
                             )
                         },
@@ -608,6 +608,7 @@ internal fun ModernSettingsContent(
                         trailing = {
                             ModernSwitch(
                                 checked = settings.eventSettings.enabled,
+                                label = "Events",
                                 onCheckedChange = { preferences.setEventsEnabled(it) },
                             )
                         },
@@ -648,7 +649,8 @@ private fun ModernModeToggle(
     ) {
         Row(
             modifier = Modifier
-                .height(46.dp)
+                .heightIn(min = 52.dp)
+                .selectableGroup()
                 .padding(2.dp),
         ) {
             ModernModeHalf(
@@ -685,10 +687,10 @@ private fun ModernModeHalf(
 
     Box(
         modifier = modifier
-            .fillMaxSize()
+            .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(38.dp))
             .background(background)
-            .clickable(onClick = onClick),
+            .selectable(selected = selected, role = Role.Tab, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -706,17 +708,7 @@ private fun ModernAutoSwitchCard(
     onEnabledChange: (Boolean) -> Unit,
     onIntervalChange: (Long) -> Unit,
 ) {
-    val intervals = listOf(
-        1_000L to "1s",
-        5_000L to "5s",
-        30_000L to "30s",
-        5 * 60_000L to "5m",
-        30 * 60_000L to "30m",
-        60 * 60_000L to "1h",
-    )
-    val selectedIndex = intervals.indexOfFirst { it.first == settings.autoSwitchSettings.intervalMs }
-        .takeIf { it >= 0 } ?: intervals.lastIndex
-
+    val feedback = rememberUxFeedback(settings.soundsEnabled, settings.vibrationsEnabled)
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -736,60 +728,17 @@ private fun ModernAutoSwitchCard(
                     text = "Automatically rotate between Yil and Umr.",
                     color = ModernTextMuted,
                     fontSize = 13.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
             ModernSwitch(
                 checked = settings.autoSwitchSettings.enabled,
+                                label = "Auto-switch",
                 onCheckedChange = onEnabledChange,
             )
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Switch every",
-                color = Color.White,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = "Every ${intervals[selectedIndex].second}",
-                color = ModernGold,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = "⌄",
-                color = ModernGold,
-                fontSize = 21.sp,
-                modifier = Modifier.padding(start = 8.dp),
-            )
-        }
-
-        ModernDiscreteSlider(
-            selectedIndex = selectedIndex,
-            itemCount = intervals.size,
-            onIndexChange = { index -> onIntervalChange(intervals[index].first) },
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            intervals.forEachIndexed { index, (_, label) ->
-                Text(
-                    text = label,
-                    color = if (index == selectedIndex) ModernGold else ModernTextMuted,
-                    fontSize = 13.sp,
-                    fontWeight = if (index == selectedIndex) FontWeight.Bold else FontWeight.Medium,
-                )
-            }
-        }
+        IntervalSlider(currentMs = settings.autoSwitchSettings.intervalMs,
+            onIntervalChange = onIntervalChange, feedback = feedback)
 
         Text(
             text = if (settings.autoSwitchSettings.enabled) {
@@ -799,8 +748,6 @@ private fun ModernAutoSwitchCard(
             },
             color = ModernTextMuted,
             fontSize = 12.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -870,15 +817,11 @@ private fun ModernSettingRow(
                 color = Color.White,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = subtitle,
                 color = ModernTextMuted,
                 fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
         }
         if (trailing != null) {
@@ -949,33 +892,14 @@ private fun ModernSwitch(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    label: String = "Setting",
 ) {
-    val knobOffset by animateDpAsState(
-        targetValue = if (checked) 27.dp else 3.dp,
-        label = "switchOffset",
-    )
-    Box(
-        modifier = modifier
-            .width(58.dp)
-            .height(34.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(if (checked) ModernGold else Color(0xFF1B1B1B))
-            .border(
-                width = 1.dp,
-                color = if (checked) ModernGold else Color.White.copy(alpha = 0.12f),
-                shape = RoundedCornerShape(20.dp),
-            )
-            .clickable { onCheckedChange(!checked) }
-            .padding(vertical = 3.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .padding(start = knobOffset)
-                .size(28.dp)
-                .clip(CircleShape)
-                .background(Color(0xFF050505))
-        )
-    }
+    Switch(checked = checked, onCheckedChange = onCheckedChange,
+        modifier = modifier.semantics { contentDescription = label },
+        colors = SwitchDefaults.colors(
+            checkedTrackColor = ModernGold, checkedThumbColor = Color.Black,
+            uncheckedTrackColor = ModernPanel, uncheckedThumbColor = ModernTextMuted,
+        ))
 }
 
 @Composable
@@ -1154,7 +1078,7 @@ private fun ModernThemeOption(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
                 .border(1.5.dp, borderColor, RoundedCornerShape(16.dp))
-                .clickable(onClick = onClick)
+                .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
                 .padding(6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -1234,6 +1158,7 @@ private fun ModernPercentSlider(
             value = value,
             onValueChange = onValueChange,
             valueRange = 0f..1f,
+            label = title,
             modifier = Modifier.padding(top = 4.dp),
         )
     }
@@ -1281,6 +1206,7 @@ private fun ModernOffsetRow(
             value = value,
             onValueChange = onValueChange,
             valueRange = valueRange,
+            label = title,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 43.dp, end = 4.dp),
@@ -1301,7 +1227,7 @@ private fun ModernSelectPill(
         modifier = modifier
             .height(52.dp)
             .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick),
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
         shape = RoundedCornerShape(14.dp),
         color = Color.Black.copy(alpha = 0.25f),
         border = BorderStroke(1.3.dp, if (selected) ModernGold else Color.White.copy(alpha = 0.10f)),
@@ -1340,7 +1266,7 @@ private fun ModernColumnOption(
                 .fillMaxWidth()
                 .height(62.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .clickable(onClick = onClick),
+                .selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
             shape = RoundedCornerShape(14.dp),
             color = Color.Black.copy(alpha = 0.22f),
             border = BorderStroke(1.3.dp, if (selected) ModernGold else Color.White.copy(alpha = 0.10f)),
@@ -1401,7 +1327,7 @@ private fun ModernGoalPositionButton(
                 .width(90.dp)
                 .height(56.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .clickable(onClick = onClick),
+                .selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
             shape = RoundedCornerShape(14.dp),
             color = Color.Black.copy(alpha = 0.22f),
             border = BorderStroke(1.3.dp, if (selected) ModernGold else Color.White.copy(alpha = 0.10f)),
@@ -1549,123 +1475,16 @@ private fun CheckBadge(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ModernDiscreteSlider(
-    selectedIndex: Int,
-    itemCount: Int,
-    onIndexChange: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var widthPx by remember { mutableStateOf(1) }
-    fun indexFromX(x: Float): Int {
-        val usable = widthPx.toFloat().coerceAtLeast(1f)
-        return ((x / usable) * (itemCount - 1)).roundToInt().coerceIn(0, itemCount - 1)
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(28.dp)
-            .onSizeChanged { widthPx = it.width }
-            .pointerInput(itemCount) {
-                detectTapGestures { offset -> onIndexChange(indexFromX(offset.x)) }
-            }
-            .pointerInput(itemCount) {
-                detectDragGestures { change, _ ->
-                    onIndexChange(indexFromX(change.position.x))
-                }
-            }
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val y = size.height / 2f
-            val thumbRadius = 8.5.dp.toPx()
-            val tickRadius = 4.2.dp.toPx()
-            val startX = thumbRadius
-            val endX = size.width - thumbRadius
-            val selectedX = startX + (endX - startX) * (selectedIndex / (itemCount - 1).toFloat())
-            val inactiveColor = Color.White.copy(alpha = 0.20f)
-
-            // Active (filled) line from start to thumb
-            drawLine(
-                color = ModernGold,
-                start = Offset(startX, y),
-                end = Offset(selectedX, y),
-                strokeWidth = 3.dp.toPx(),
-                cap = StrokeCap.Round,
-            )
-            // Inactive (unfilled) line from thumb to end
-            drawLine(
-                color = inactiveColor,
-                start = Offset(selectedX, y),
-                end = Offset(endX, y),
-                strokeWidth = 3.dp.toPx(),
-                cap = StrokeCap.Round,
-            )
-            // Ticks — gold up to and including selected, muted after
-            repeat(itemCount) { index ->
-                val x = startX + (endX - startX) * (index / (itemCount - 1).toFloat())
-                val color = if (index <= selectedIndex) ModernGold else inactiveColor
-                drawCircle(color = color, radius = tickRadius, center = Offset(x, y))
-            }
-            // Thumb
-            drawCircle(color = ModernGold, radius = thumbRadius, center = Offset(selectedX, y))
-        }
-    }
-}
-
-@Composable
 private fun ModernValueSlider(
     value: Float,
     valueRange: ClosedFloatingPointRange<Float>,
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
+    label: String = "Value",
 ) {
-    var widthPx by remember { mutableStateOf(1) }
-    val range = valueRange.endInclusive - valueRange.start
-    fun valueFromX(x: Float): Float {
-        val usable = widthPx.toFloat().coerceAtLeast(1f)
-        val fraction = (x / usable).coerceIn(0f, 1f)
-        return valueRange.start + range * fraction
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(24.dp)
-            .onSizeChanged { widthPx = it.width }
-            .pointerInput(valueRange) {
-                detectTapGestures { offset -> onValueChange(valueFromX(offset.x)) }
-            }
-            .pointerInput(valueRange) {
-                detectDragGestures { change, _ ->
-                    onValueChange(valueFromX(change.position.x))
-                }
-            }
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val y = size.height / 2f
-            val thumbRadius = 7.5.dp.toPx()
-            val startX = thumbRadius
-            val endX = size.width - thumbRadius
-            val fraction = ((value - valueRange.start) / range).coerceIn(0f, 1f)
-            val thumbX = startX + (endX - startX) * fraction
-
-            drawLine(
-                color = Color.White.copy(alpha = 0.18f),
-                start = Offset(startX, y),
-                end = Offset(endX, y),
-                strokeWidth = 3.dp.toPx(),
-                cap = StrokeCap.Round,
-            )
-            drawLine(
-                color = ModernGold,
-                start = Offset(startX, y),
-                end = Offset(thumbX, y),
-                strokeWidth = 3.dp.toPx(),
-                cap = StrokeCap.Round,
-            )
-            drawCircle(color = ModernGold, radius = thumbRadius, center = Offset(thumbX, y))
-        }
-    }
+    Slider(value = value.coerceIn(valueRange.start, valueRange.endInclusive),
+        valueRange = valueRange, onValueChange = onValueChange, colors = modernSliderColors(),
+        modifier = modifier.fillMaxWidth().semantics { contentDescription = label })
 }
 
 @Composable
@@ -2667,13 +2486,11 @@ private fun LifeDataEditorSheet(
     initialWho: WhoTab,
     onDismiss: () -> Unit,
 ) {
-    var selected by remember { mutableStateOf(initialWho) }
+    var selected by rememberSaveable { mutableStateOf(initialWho) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val today = LocalDate.now()
 
-    // Per-person scratch text state. Seeded ONCE from prefs on first compose
-    // so that subsequent prefs changes (caused by live-save firing) don't
-    // overwrite what the user is currently typing.
+    // Keep edits as a draft until Done; dismissing never changes saved birthdays.
     fun seedDay(ms: Long) =
         if (ms == 0L) "" else Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).dayOfMonth.toString().padStart(2, '0')
     fun seedMonth(ms: Long) =
@@ -2681,29 +2498,35 @@ private fun LifeDataEditorSheet(
     fun seedYear(ms: Long) =
         if (ms == 0L) "" else Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).year.toString()
 
-    var meD by remember { mutableStateOf(seedDay(settings.umrSettings.birthdayEpochMs)) }
-    var meM by remember { mutableStateOf(seedMonth(settings.umrSettings.birthdayEpochMs)) }
-    var meY by remember { mutableStateOf(seedYear(settings.umrSettings.birthdayEpochMs)) }
-    var dadD by remember { mutableStateOf(seedDay(settings.umrSettings.dadBirthdayEpochMs)) }
-    var dadM by remember { mutableStateOf(seedMonth(settings.umrSettings.dadBirthdayEpochMs)) }
-    var dadY by remember { mutableStateOf(seedYear(settings.umrSettings.dadBirthdayEpochMs)) }
-    var momD by remember { mutableStateOf(seedDay(settings.umrSettings.momBirthdayEpochMs)) }
-    var momM by remember { mutableStateOf(seedMonth(settings.umrSettings.momBirthdayEpochMs)) }
-    var momY by remember { mutableStateOf(seedYear(settings.umrSettings.momBirthdayEpochMs)) }
+    var meD by rememberSaveable { mutableStateOf(seedDay(settings.umrSettings.birthdayEpochMs)) }
+    var meM by rememberSaveable { mutableStateOf(seedMonth(settings.umrSettings.birthdayEpochMs)) }
+    var meY by rememberSaveable { mutableStateOf(seedYear(settings.umrSettings.birthdayEpochMs)) }
+    var dadD by rememberSaveable { mutableStateOf(seedDay(settings.umrSettings.dadBirthdayEpochMs)) }
+    var dadM by rememberSaveable { mutableStateOf(seedMonth(settings.umrSettings.dadBirthdayEpochMs)) }
+    var dadY by rememberSaveable { mutableStateOf(seedYear(settings.umrSettings.dadBirthdayEpochMs)) }
+    var momD by rememberSaveable { mutableStateOf(seedDay(settings.umrSettings.momBirthdayEpochMs)) }
+    var momM by rememberSaveable { mutableStateOf(seedMonth(settings.umrSettings.momBirthdayEpochMs)) }
+    var momY by rememberSaveable { mutableStateOf(seedYear(settings.umrSettings.momBirthdayEpochMs)) }
 
-    fun trySave(who: WhoTab, d: String, m: String, y: String) {
-        val di = d.toIntOrNull() ?: return
-        val mi = m.toIntOrNull() ?: return
-        val yi = y.toIntOrNull() ?: return
-        if (yi !in 1900..today.year) return
-        val date = runCatching { LocalDate.of(yi, mi, di) }.getOrNull() ?: return
-        if (date.isAfter(today)) return
-        val ms = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        when (who) {
-            WhoTab.ME  -> preferences.setUmrBirthday(ms)
-            WhoTab.DAD -> preferences.setUmrDadBirthday(ms)
-            WhoTab.MOM -> preferences.setUmrMomBirthday(ms)
+    var dateError by rememberSaveable { mutableStateOf<String?>(null) }
+    fun saveDrafts(): Boolean {
+        val drafts = listOf(WhoTab.ME to BirthdayDraft(meD, meM, meY),
+            WhoTab.DAD to BirthdayDraft(dadD, dadM, dadY), WhoTab.MOM to BirthdayDraft(momD, momM, momY))
+        val invalid = drafts.firstOrNull { !it.second.isBlank && it.second.resolve(today) == null }
+        if (invalid != null) {
+            selected = invalid.first
+            dateError = "Enter a valid birthday from 1900 to today, using DD / MM / YYYY."
+            return false
         }
+        for ((who, draft) in drafts) {
+            val ms = draft.resolve(today)?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli() ?: 0L
+            when (who) {
+                WhoTab.ME -> preferences.setUmrBirthday(ms)
+                WhoTab.DAD -> preferences.setUmrDadBirthday(ms)
+                WhoTab.MOM -> preferences.setUmrMomBirthday(ms)
+            }
+        }
+        return true
     }
 
     ModalBottomSheet(
@@ -2714,6 +2537,7 @@ private fun LifeDataEditorSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -2727,11 +2551,7 @@ private fun LifeDataEditorSheet(
                 )
                 Button(
                     onClick = {
-                        // Defensive sweep — save anything currently valid.
-                        trySave(WhoTab.ME,  meD,  meM,  meY)
-                        trySave(WhoTab.DAD, dadD, dadM, dadY)
-                        trySave(WhoTab.MOM, momD, momM, momY)
-                        onDismiss()
+                        if (saveDrafts()) onDismiss()
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFFFC62E)),
                 ) { Text("Done") }
@@ -2746,23 +2566,25 @@ private fun LifeDataEditorSheet(
             when (selected) {
                 WhoTab.ME -> DateNumberInputs(
                     dayText = meD, monthText = meM, yearText = meY,
-                    onDayChange   = { meD = it; trySave(WhoTab.ME, it, meM, meY) },
-                    onMonthChange = { meM = it; trySave(WhoTab.ME, meD, it, meY) },
-                    onYearChange  = { meY = it; trySave(WhoTab.ME, meD, meM, it) },
+                    onDayChange   = { meD = it; dateError = null },
+                    onMonthChange = { meM = it; dateError = null },
+                    onYearChange  = { meY = it; dateError = null },
                 )
                 WhoTab.DAD -> DateNumberInputs(
                     dayText = dadD, monthText = dadM, yearText = dadY,
-                    onDayChange   = { dadD = it; trySave(WhoTab.DAD, it, dadM, dadY) },
-                    onMonthChange = { dadM = it; trySave(WhoTab.DAD, dadD, it, dadY) },
-                    onYearChange  = { dadY = it; trySave(WhoTab.DAD, dadD, dadM, it) },
+                    onDayChange   = { dadD = it; dateError = null },
+                    onMonthChange = { dadM = it; dateError = null },
+                    onYearChange  = { dadY = it; dateError = null },
                 )
                 WhoTab.MOM -> DateNumberInputs(
                     dayText = momD, monthText = momM, yearText = momY,
-                    onDayChange   = { momD = it; trySave(WhoTab.MOM, it, momM, momY) },
-                    onMonthChange = { momM = it; trySave(WhoTab.MOM, momD, it, momY) },
-                    onYearChange  = { momY = it; trySave(WhoTab.MOM, momD, momM, it) },
+                    onDayChange   = { momD = it; dateError = null },
+                    onMonthChange = { momM = it; dateError = null },
+                    onYearChange  = { momY = it; dateError = null },
                 )
             }
+            dateError?.let { Text(it, color = Color(0xFFFFBCAC), fontSize = 13.sp) }
+            Text("Tap Done to save. Clear all date fields to remove a birthday. Swipe down or go back to cancel.", color = ModernTextMuted, fontSize = 12.sp)
             Spacer(modifier = Modifier.height(8.dp))
         }
     }

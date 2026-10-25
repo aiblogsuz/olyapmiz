@@ -13,9 +13,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -44,8 +46,7 @@ fun IntervalSlider(
     feedback: UxFeedback,
     modifier: Modifier = Modifier,
 ) {
-    var slider01 by remember { mutableFloatStateOf(IntervalSliderMath.msToSlider01(currentMs)) }
-    var lastTickCrossed by remember { mutableStateOf(-1) }
+    var slider01 by remember(currentMs) { mutableFloatStateOf(IntervalSliderMath.msToSlider01(currentMs)) }
     val displayedMs = remember(slider01) { IntervalSliderMath.slider01ToSnappedMs(slider01) }
     val label = remember(displayedMs) { IntervalSliderMath.formatLabel(displayedMs) }
 
@@ -62,19 +63,18 @@ fun IntervalSlider(
         Slider(
             value = slider01,
             onValueChange = { newValue ->
+                if (IntervalSliderMath.crossedTick(slider01, newValue)) feedback.tick()
                 slider01 = newValue
-                val crossedIndex = IntervalSliderMath.tickIndexAt(newValue)
-                if (crossedIndex >= 0 && crossedIndex != lastTickCrossed) {
-                    feedback.tick()
-                    lastTickCrossed = crossedIndex
-                }
             },
             onValueChangeFinished = {
                 feedback.confirm()
                 onIntervalChange(displayedMs)
             },
             valueRange = 0f..1f,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().semantics {
+                contentDescription = "Auto-switch interval"
+                stateDescription = label
+            },
             colors = SliderDefaults.colors(
                 thumbColor = BrandColors.AmberGold,
                 activeTrackColor = BrandColors.AmberGold,
@@ -154,11 +154,18 @@ object IntervalSliderMath {
         return bestIdx
     }
 
+    /** Detects anchor crossings even when a fast drag skips its proximity window. */
+    fun crossedTick(from: Float, to: Float): Boolean = TICK_POSITIONS.any { anchor ->
+        if (to > from) anchor > from && anchor <= to else anchor < from && anchor >= to
+    }
+
     /** Human label for a snapped interval. */
     fun formatLabel(ms: Long): String {
         if (ms >= 3_600_000L) return "Every 1 hour"
         if (ms >= 60_000L) {
             val minutes = ms / 60_000L
+            val seconds = (ms % 60_000L) / 1_000L
+            if (seconds > 0) return "Every ${minutes}m ${seconds}s"
             return if (minutes == 1L) "Every 1 minute" else "Every $minutes minutes"
         }
         val seconds = ms / 1_000L

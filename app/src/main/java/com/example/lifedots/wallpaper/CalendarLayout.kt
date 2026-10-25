@@ -214,6 +214,9 @@ object UmrLayoutCompute {
     const val ROWS = 80
     const val COLS = 52
 
+    /** Milliseconds in one 7-day week (single source of truth for Umr math). */
+    const val MS_PER_WEEK: Long = 7L * 24L * 60L * 60L * 1000L
+
     /** Insert a wider horizontal gap every WEEKS_PER_GROUP columns so months read at a glance. */
     const val WEEKS_PER_GROUP = 4
 

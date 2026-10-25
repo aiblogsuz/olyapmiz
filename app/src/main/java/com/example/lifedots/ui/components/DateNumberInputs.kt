@@ -4,7 +4,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -38,11 +44,11 @@ fun DateNumberInputs(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        DateField(value = dayText, label = "DD", maxLen = 2,
+        DateField(value = dayText, label = "DD", description = "Day", maxLen = 2,
             onValueChange = onDayChange, modifier = Modifier.weight(1f))
-        DateField(value = monthText, label = "MM", maxLen = 2,
+        DateField(value = monthText, label = "MM", description = "Month", maxLen = 2,
             onValueChange = onMonthChange, modifier = Modifier.weight(1f))
-        DateField(value = yearText, label = "YYYY", maxLen = 4,
+        DateField(value = yearText, label = "YYYY", description = "Year", maxLen = 4, last = true,
             onValueChange = onYearChange, modifier = Modifier.weight(1.4f))
     }
 }
@@ -51,10 +57,13 @@ fun DateNumberInputs(
 private fun DateField(
     value: String,
     label: String,
+    description: String,
     maxLen: Int,
+    last: Boolean = false,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val focusManager = LocalFocusManager.current
     OutlinedTextField(
         value = value,
         onValueChange = { raw ->
@@ -63,7 +72,10 @@ private fun DateField(
         },
         label = { Text(label, color = Color(0xB3FFC62E), fontSize = 11.sp) },
         singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number,
+            imeAction = if (last) ImeAction.Done else ImeAction.Next),
+        keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Next) },
+            onDone = { focusManager.clearFocus() }),
         textStyle = TextStyle(
             color = Color(0xFFFFC62E),
             fontSize = 22.sp,
@@ -78,6 +90,6 @@ private fun DateField(
             focusedContainerColor = Color(0xFF14110B),
             unfocusedContainerColor = Color(0xFF14110B),
         ),
-        modifier = modifier,
+        modifier = modifier.semantics { contentDescription = description },
     )
 }

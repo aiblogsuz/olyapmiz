@@ -28,13 +28,25 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.semantics.Role
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.example.lifedots.ui.components.CalendarPreview
+import com.example.lifedots.ui.components.calendarSelectionSummary
+import com.example.lifedots.wallpaper.LockWallpaperController
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -86,7 +98,6 @@ import com.example.lifedots.updater.UpdateInfo
 import com.example.lifedots.updater.UpdateInstaller
 import com.example.lifedots.updater.UpdateNotifier
 import com.example.lifedots.wallpaper.LifeDotsWallpaperService
-import com.example.lifedots.wallpaper.SnapshotRenderer
 import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.math.PI
@@ -94,6 +105,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 class MainActivity : ComponentActivity() {
+    private var applyingWallpaper by mutableStateOf(false)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Touch the prefs singleton on every launch so the rebrand migration
@@ -101,15 +113,12 @@ class MainActivity : ComponentActivity() {
         // engine happens to start. Critical for users upgrading from upstream
         // LifeDots where view_mode=CONTINUOUS was persisted.
         LifeDotsPreferences.getInstance(this)
-        // Wipe any leftover downloaded APKs from previous update attempts so
-        // we don't accumulate them on disk.
-        UpdateInstaller(this).cleanCache()
         enableEdgeToEdge()
-        // The reference home screen is full-bleed with no visible system chrome.
+        // Keep Android navigation and status controls available on every screen.
         WindowCompat.getInsetsController(window, window.decorView).apply {
             isAppearanceLightStatusBars = false
             isAppearanceLightNavigationBars = false
-            hide(WindowInsetsCompat.Type.systemBars())
+            show(WindowInsetsCompat.Type.systemBars())
         }
         @Suppress("DEPRECATION")
         window.statusBarColor = android.graphics.Color.TRANSPARENT
@@ -118,17 +127,16 @@ class MainActivity : ComponentActivity() {
         // If the user opted into "calendar on lock, black on home" mode,
         // refresh the lock snapshot every time the app opens so the calendar
         // reflects today's date even when the user hasn't tapped Set again.
-        refreshLockSnapshotIfNeeded()
         setContent {
             LifeDotsTheme {
                 val installer = remember { UpdateInstaller(this) }
                 OnboardingScreen(
                     onSetWallpaper = { setAsWallpaper() },
+                    applyingWallpaper = applyingWallpaper,
                     onOpenSettings = { openSettings() },
                     onAllowBackground = { requestIgnoreBatteryOptimizations() },
                     onOpenSamsungNeverSleeping = { openSamsungNeverSleeping() },
                     onInstallApk = { apk -> installer.launchInstaller(this, apk) },
-                    onLaunchSelfUninstall = { installer.launchSelfUninstall(this) },
                     autoCheckOnLaunch = true,
                     triggerFromNotification = intent?.getBooleanExtra(
                         UpdateNotifier.EXTRA_FROM_UPDATE_NOTIFICATION, false
@@ -198,62 +206,32 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Paint today's Yil/Umr snapshot onto FLAG_LOCK and a 1x1 black bitmap
-     * onto FLAG_SYSTEM. Sized to the device's actual display so the
-     * snapshot doesn't get cropped or stretched on the lock screen.
-     */
     private fun applyCalendarLockBlackHome() {
-        try {
-            val wm = WallpaperManager.getInstance(this)
-            val metrics = resources.displayMetrics
-            val width = metrics.widthPixels
-            val height = metrics.heightPixels
-            val snapshot = SnapshotRenderer.render(this, width, height)
-            val black = android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888).apply {
-                eraseColor(android.graphics.Color.BLACK)
+        if (applyingWallpaper) return
+        applyingWallpaper = true
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { LockWallpaperController.apply(this@MainActivity) }
+                Toast.makeText(this@MainActivity, "Lock calendar and black home screen updated", Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                Log.w("LifeDots", "Could not apply lock calendar", e)
+                Toast.makeText(this@MainActivity, e.message ?: "Couldn't update wallpaper. Try again.", Toast.LENGTH_LONG).show()
+            } finally {
+                applyingWallpaper = false
             }
-            wm.setBitmap(snapshot, null, true, WallpaperManager.FLAG_LOCK)
-            wm.setBitmap(black, null, true, WallpaperManager.FLAG_SYSTEM)
-            Toast.makeText(this, "Lock screen updated", Toast.LENGTH_SHORT).show()
-        } catch (e: SecurityException) {
-            Log.w("LifeDots", "applyCalendarLockBlackHome: SET_WALLPAPER denied", e)
-            Toast.makeText(
-                this,
-                "Couldn't update wallpaper — check permissions",
-                Toast.LENGTH_LONG
-            ).show()
-        } catch (e: Exception) {
-            Log.w("LifeDots", "applyCalendarLockBlackHome: failed", e)
-            Toast.makeText(this, "Couldn't update wallpaper", Toast.LENGTH_LONG).show()
         }
     }
 
-    /**
-     * If the user is in CALENDAR_LOCK_BLACK_HOME mode and the current lock
-     * wallpaper is one we set ourselves, regenerate it for today's date.
-     *
-     * The "did we set this" check is implicit: we only refresh if applyMode
-     * is the bitmap mode AND a bitmap was previously written. setBitmap is
-     * idempotent — re-running it on top of our own bitmap just replaces it
-     * with today's snapshot. We skip if mode == BOTH_LIVE so we don't
-     * stomp on a live wallpaper the user might be running.
-     */
     private fun refreshLockSnapshotIfNeeded() {
-        val prefs = LifeDotsPreferences.getInstance(this)
-        if (prefs.settings.applyMode != WallpaperApplyMode.CALENDAR_LOCK_BLACK_HOME) return
-        try {
-            val wm = WallpaperManager.getInstance(this)
-            // Only refresh if we previously set a lock-screen bitmap. If the
-            // user has never tapped Set, we don't want to silently push a
-            // wallpaper they didn't ask for.
-            val existing = wm.getWallpaperFile(WallpaperManager.FLAG_LOCK)
-            if (existing == null) return
-            existing.close()
-            applyCalendarLockBlackHome()
-        } catch (e: Exception) {
-            Log.w("LifeDots", "refreshLockSnapshotIfNeeded: failed", e)
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { LockWallpaperController.refreshIfOwned(this@MainActivity) }
+                .onFailure { Log.w("LifeDots", "Could not refresh owned lock calendar", it) }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshLockSnapshotIfNeeded()
     }
 
     private fun openWallpaperPicker() {
@@ -338,7 +316,7 @@ fun OnboardingScreen(
     onAllowBackground: () -> Unit,
     onOpenSamsungNeverSleeping: () -> Unit,
     onInstallApk: (File) -> UpdateInstaller.LaunchResult,
-    onLaunchSelfUninstall: () -> Unit,
+    applyingWallpaper: Boolean = false,
     autoCheckOnLaunch: Boolean,
     triggerFromNotification: Boolean,
     modifier: Modifier = Modifier
@@ -348,6 +326,7 @@ fun OnboardingScreen(
     var updateState by remember { mutableStateOf<UpdateUiState>(UpdateUiState.Idle) }
     var pendingInstallApk by remember { mutableStateOf<File?>(null) }
     var pendingInstallInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+    var showSignatureHelp by remember { mutableStateOf(false) }
 
     fun handleInstall(apk: File) {
         val info = when (val state = updateState) {
@@ -468,7 +447,7 @@ fun OnboardingScreen(
         is UpdateUiState.Available -> "Download v${state.info.versionName}"
         is UpdateUiState.Ready -> "Install Update"
         is UpdateUiState.InstallPermissionRequired -> "Allow Install"
-        is UpdateUiState.SignatureMismatch -> "Uninstall Old App"
+        is UpdateUiState.SignatureMismatch -> "Update Help"
         is UpdateUiState.UpToDate -> "Up to Date"
         is UpdateUiState.Error -> "Try Again"
         else -> "Update"
@@ -480,7 +459,7 @@ fun OnboardingScreen(
             is UpdateUiState.Available -> startDownload(state.info)
             is UpdateUiState.Ready -> handleInstall(state.apk)
             is UpdateUiState.InstallPermissionRequired -> handleInstall(state.apk)
-            is UpdateUiState.SignatureMismatch -> onLaunchSelfUninstall()
+            is UpdateUiState.SignatureMismatch -> { showSignatureHelp = true }
             else -> checkForUpdate(silent = false)
         }
     }
@@ -506,95 +485,66 @@ fun OnboardingScreen(
         }
     }
 
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color(0xFF030302))
-    ) {
-        val screenWidth = maxWidth
-        val screenHeight = maxHeight
-        val gold = Color(0xFFC5A266)
-
+    Box(modifier = modifier.fillMaxSize().background(Color(0xFF030302))) {
         Image(
             painter = painterResource(id = R.drawable.home_bg),
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
+            alpha = 0.20f,
+            modifier = Modifier.fillMaxSize(),
         )
-
-        PaintingHomeScrim(
-            modifier = Modifier.matchParentSize()
-        )
-
-        TitleMark(
-            modifier = Modifier
-                .fillMaxWidth()
-                .offset(y = screenHeight * 0.555f),
-            gold = gold
-        )
-
         Column(
-            modifier = Modifier
-                .offset(x = screenWidth * 0.09f, y = screenHeight * 0.665f)
-                .width(screenWidth * 0.82f)
-                .height(screenHeight * 0.275f),
-            verticalArrangement = Arrangement.spacedBy(screenHeight * 0.014f)
+            modifier = Modifier.fillMaxSize().safeDrawingPadding()
+                .verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            Text("O’lyapmiz", color = Color(0xFFC5A266), fontFamily = FontFamily.Serif,
+                fontSize = 36.sp, fontWeight = FontWeight.Bold)
+            Text(calendarSelectionSummary(settings), color = Color(0xFFE3D8C5),
+                textAlign = TextAlign.Center, fontSize = 15.sp)
+            CalendarPreview(settings = settings, modifier = Modifier.fillMaxWidth())
+            val gold = Color(0xFFC5A266)
             HomeActionButton(
-                label = "Set as Wallpaper",
+                label = if (applyingWallpaper) "Applying wallpaper…" else "Set as Wallpaper",
                 icon = HomeIcon.Picture,
-                onClick = {
-                    feedback.click()
-                    onSetWallpaper()
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                gold = gold,
-                large = true
+                onClick = { feedback.click(); onSetWallpaper() },
+                enabled = !applyingWallpaper,
+                modifier = Modifier.fillMaxWidth(), gold = gold, large = true,
             )
-            HomeActionButton(
-                label = "Customize",
-                icon = HomeIcon.Palette,
-                onClick = {
-                    feedback.click()
-                    onOpenSettings()
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                gold = gold,
-                large = true
-            )
-            HomeActionButton(
-                label = updateButtonText,
-                icon = HomeIcon.Download,
-                onClick = { handleUpdateButton() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                gold = gold,
-                large = true,
-                enabled = updateState !is UpdateUiState.Checking &&
-                    updateState !is UpdateUiState.Downloading
-            )
+            HomeActionButton(label = "Customize", icon = HomeIcon.Palette,
+                onClick = { feedback.click(); onOpenSettings() },
+                modifier = Modifier.fillMaxWidth(), gold = gold, large = true)
+            HomeActionButton(label = updateButtonText, icon = HomeIcon.Download,
+                onClick = { handleUpdateButton() }, modifier = Modifier.fillMaxWidth(),
+                gold = gold, large = true,
+                enabled = updateState !is UpdateUiState.Checking && updateState !is UpdateUiState.Downloading)
+            when (val state = updateState) {
+                is UpdateUiState.Downloading -> Text("Downloaded ${(state.progress.coerceIn(0f, 1f) * 100).toInt()}%", color = gold)
+                is UpdateUiState.Error -> Text(state.message, color = Color(0xFFFFBCAC), textAlign = TextAlign.Center)
+                is UpdateUiState.InstallPermissionRequired -> Text("Allow updates from this app in Android settings, then return here.", color = gold)
+                is UpdateUiState.SignatureMismatch -> Text("This release uses a different signing key. Your saved calendar is safe; open Update Help for next steps.", color = gold)
+                else -> Unit
+            }
             HomeActionButton(
                 label = when {
-                    !notificationsAllowed -> "Press to Allow Notifications"
-                    batteryOptimized -> "Press to Allow Background"
-                    isSamsungLikeDevice() -> "Press for Never Sleeping"
-                    else -> "Press to Keep Running"
-                },
-                icon = HomeIcon.Settings,
+                    !notificationsAllowed -> "Allow Notifications"
+                    batteryOptimized -> "Allow Background Activity"
+                    isSamsungLikeDevice() -> "Background Settings"
+                    else -> "Keep Running"
+                }, icon = HomeIcon.Settings,
                 onClick = { handleKeepRunningButton() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                gold = gold,
-                large = true
+                modifier = Modifier.fillMaxWidth(), gold = gold, large = true,
             )
         }
-
+    }
+    if (showSignatureHelp) {
+        AlertDialog(
+            onDismissRequest = { showSignatureHelp = false },
+            title = { Text("Update needs the original signing key") },
+            text = { Text("Android cannot install this release over your current app because their signing keys differ. Keep this app and obtain an update signed with the same key. Uninstalling would erase your saved calendar, birthdays, goals and events, and the downloaded update. Your current settings have not been changed.") },
+            confirmButton = { TextButton(onClick = { showSignatureHelp = false }) { Text("Keep my app") } },
+        )
     }
 }
 
@@ -727,12 +677,13 @@ private fun HomeActionButton(
     val shape = RoundedCornerShape(13.dp)
     Box(
         modifier = modifier
-            .fillMaxSize()
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
             .clip(shape)
             .background(Color(0xC20A0906))
             .border(BorderStroke(1.dp, gold.copy(alpha = 0.42f)), shape)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp),
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 14.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -754,7 +705,7 @@ private fun HomeActionButton(
                 fontSize = if (large) 20.sp else 10.5.sp,
                 lineHeight = if (large) 24.sp else 15.sp,
                 fontWeight = FontWeight.Medium,
-                maxLines = if (large) 1 else 2,
+                maxLines = if (large) 3 else 2,
                 overflow = TextOverflow.Ellipsis
             )
         }
